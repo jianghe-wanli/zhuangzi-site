@@ -1,89 +1,25 @@
-"use client";
+import type { Metadata } from "next";
+import { Suspense } from "react";
 
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useMemo } from "react";
+import { chapterTitles } from "@/lib/chapter-lookup";
+import { buildPageMetadata } from "@/lib/site";
 
-import { chaptersMeta, passageNumber } from "@/data/chapters/metadata";
+import SharedAnnotation from "./SharedAnnotation";
+import SharedAnnotationEmpty from "./SharedAnnotationEmpty";
 
-function AnnotationsContent() {
-  const searchParams = useSearchParams();
-  const ch = searchParams.get("ch");
-  const p = searchParams.get("p");
-  const a = searchParams.get("a");
-
-  const annotation = useMemo(() => {
-    if (ch && p && a) {
-      // URLSearchParams.get() 已自动解码，这里不能再 decode（含 % 的文本会抛 URIError）
-      return { chapterId: ch, passageId: p, text: a };
-    }
-    return null;
-  }, [ch, p, a]);
-
-  if (!annotation) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 text-center">
-        <h1 className="text-3xl font-bold tracking-wide mb-4">共享批注</h1>
-        <div className="p-6 rounded-lg border border-[var(--border-light)] bg-[var(--bg-card)]">
-          <p className="text-sm text-[var(--text-secondary)] mb-4">
-            此页面用于展示他人分享的段落批注。
-          </p>
-          <p className="text-xs text-[var(--text-secondary)]">
-            需要包含批注参数的链接才能查看。你可以从任意段落点击分享按钮生成链接。
-          </p>
-          <Link
-            href="/chapters/01-xiaoyao-you"
-            className="inline-block mt-4 text-sm text-[var(--text-accent)] hover:underline"
-          >
-            ← 去阅读逍遥游
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-      <Link
-        href="/"
-        className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-accent)] transition-colors"
-      >
-        ← 首页
-      </Link>
-
-      <h1 className="text-3xl font-bold tracking-wide mt-4 mb-2">共享批注</h1>
-      <p className="text-sm text-[var(--text-secondary)] mb-8">
-        他人分享的段落批注
-      </p>
-
-      <div className="p-6 rounded-lg border border-[var(--border-light)] bg-[var(--bg-card)]">
-        <div className="text-xs text-[var(--text-secondary)] mb-3">
-          <Link
-            href={`/chapters/${annotation.chapterId}`}
-            className="text-[var(--text-accent)] hover:underline"
-          >
-            {chaptersMeta.find((m) => m.id === annotation.chapterId)?.title ?? annotation.chapterId}
-          </Link>
-          {" · "}第 {passageNumber(annotation.chapterId, annotation.passageId) ?? annotation.passageId} 节
-        </div>
-        <div className="text-sm text-[var(--text-primary)] leading-relaxed bg-[var(--bg-secondary)] rounded p-4">
-          {annotation.text}
-        </div>
-        <Link
-          href={`/chapters/${annotation.chapterId}#passage-${annotation.passageId}`}
-          className="inline-block mt-4 text-xs text-[var(--text-accent)] hover:underline"
-        >
-          查看原文 →
-        </Link>
-      </div>
-    </div>
-  );
-}
+export const metadata: Metadata = buildPageMetadata({
+  title: "我的批注",
+  description:
+    "你为《庄子》段落所作的个人批注，按篇章与节次归类，支持导出备份。数据仅保存在本地浏览器。",
+  path: "/annotations",
+  index: false,
+});
 
 export default function AnnotationsPage() {
+  // useSearchParams 需要 Suspense；fallback 用说明页本身，静态 HTML 不再只有「加载中…」
   return (
-    <Suspense fallback={<div className="max-w-4xl mx-auto px-4 py-12 text-sm text-[var(--text-secondary)]">加载中…</div>}>
-      <AnnotationsContent />
+    <Suspense fallback={<SharedAnnotationEmpty />}>
+      <SharedAnnotation chapterTitles={chapterTitles} />
     </Suspense>
   );
 }
