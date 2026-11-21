@@ -3,16 +3,13 @@
 import { useRouter } from "next/navigation";
 import { createElement, type MouseEvent, type SyntheticEvent, use, useEffect, useState } from "react";
 
-import { type Blocks, fetchBlocks, type Html, known, pending } from "@/lib/static-blocks-client";
+import { type Blocks, captured, fetchBlocks, type Html, intendedHash, known, pending } from "@/lib/static-blocks-client";
 
 /** 与 src/lib/static-html.ts 的 STATIC_BLOCKS_KEY 相同（那边是 server-only，不能 import） */
 const REGISTRY_KEY = Symbol.for("zhuangzi.static-blocks");
 const EMPTY: Html = { __html: "" };
 /** 经 blocks.json 取回后才挂载的页面，补一次锚点滚动（见下） */
 let hashHandledFor = "";
-
-/** 已交给 router.prefetch 的站内地址（整个会话内去重） */
-const prefetched = new Set<string>();
 
 const RELOAD_GUARD = "zhuangzi:sb-reload";
 /** 取回失败且已经整页重载过一次的 src：改为在页内给出提示，绝不再次重载 */
@@ -28,25 +25,27 @@ function loadBlocks(src: string): Promise<Blocks> {
     });
   }
   const p = fetchBlocks(src).catch(() => {
-    // 取不到（离线且未缓存 / 部署切换后旧页面取新产物）：退回整页加载，由 HTML 直出正文。
-    // 整页加载后的文档要么是本页 HTML（正文已在 DOM 里，不再取 blocks.json），
+    // 取不到（离线且未缓存 / 部署切换后旧页面取新产物）：退回整页加载目标页，由 HTML 直出正文。
+    // 注意此刻客户端导航多半还没提交（transition 挂起中，地址栏仍是来源页），
+    // 所以不能 location.reload() —— 那会把用户留在来源页；要显式前往目标页。
+    // 整页加载后的文档要么是目标页 HTML（正文已在 DOM 里，不再取 blocks.json），
     // 要么是 Service Worker 的离线页（没有 StaticBlock）—— 两者都不会再走到这里。
-    // 仍加一道 sessionStorage 保险：同一地址 30 秒内只重载一次，杜绝任何刷新循环。
-    let last = "";
+    // 仍加一道 sessionStorage 保险：同一目标 30 秒内只整页加载一次，杜绝任何刷新循环。
+    const target = src.replace(/blocks\.json$/, "");
     try {
-      last = sessionStorage.getItem(RELOAD_GUARD) ?? "";
-      const [url, at] = last.split("|");
-      if (url === window.location.pathname && Date.now() - Number(at) < 30_000) {
+      const [url, at] = (sessionStorage.getItem(RELOAD_GUARD) ?? "").split("|");
+      if (url === target && Date.now() - Number(at) < 30_000) {
         failed.add(src);
         return {} as Blocks;
       }
-      sessionStorage.setItem(RELOAD_GUARD, `${window.location.pathname}|${Date.now()}`);
+      sessionStorage.setItem(RELOAD_GUARD, `${target}|${Date.now()}`);
     } catch {
-      // sessionStorage 不可用（隐私模式等）：无法防循环，就不重载，直接页内提示
+      // sessionStorage 不可用（隐私模式等）：无法防循环，就不整页加载，直接页内提示
       failed.add(src);
       return {} as Blocks;
     }
-    window.location.reload();
+    if (window.location.pathname === target) window.location.reload();
+    else window.location.assign(target + (intendedHash.get(src) ?? ""));
     return new Promise<Blocks>(() => {});
   });
   pending.set(src, p);
@@ -63,7 +62,7 @@ const failureOwner = new Map<string, string>();
 /** 返回 null = 需经 blocks.json 取回；ABSENT = ssrOnly 块在客户端路由下不渲染 */
 const ABSENT: Html = { __html: "" };
 
-function initialHtml(key: string, ssrOnly: boolean | undefined): Html | null {
+function initialHtml(src: string, key: string, ssrOnly: boolean | undefined): Html | null {
   if (typeof window === "undefined") {
     const reg = (globalThis as unknown as Record<symbol, Map<string, string> | undefined>)[REGISTRY_KEY];
     const html = reg?.get(key);
@@ -82,7 +81,10 @@ function initialHtml(key: string, ssrOnly: boolean | undefined): Html | null {
   // 成本：逍遥游 36 块约 7 万字符，4 倍 CPU 降速下 1–2 ms。
   const el = document.querySelector(`[data-sb="${CSS.escape(key)}"]`);
   if (el) {
-    if (!ssrOnly && document.documentElement.lang !== "zh-Hant") known.set(key, { __html: el.innerHTML });
+    if (!ssrOnly && document.documentElement.lang !== "zh-Hant") {
+      known.set(key, { __html: el.innerHTML });
+      captured.add(src);
+    }
     return EMPTY;
   }
   return ssrOnly ? ABSENT : null;
@@ -114,7 +116,7 @@ interface StaticBlockProps {
 export default function StaticBlock({ src, id, as = "div", className, ssrOnly, type, rev }: StaticBlockProps) {
   const key = `${src}#${id}`;
   const router = useRouter();
-  const [initial] = useState(() => initialHtml(key, ssrOnly));
+  const [initial] = useState(() => initialHtml(src, key, ssrOnly));
   const [hot, setHot] = useState<Html | null>(null);
   let html = hot ?? initial;
   let fetched = false;
@@ -179,15 +181,6 @@ export default function StaticBlock({ src, id, as = "div", className, ssrOnly, t
     router.push(href);
   };
 
-  // <Link> 自带的预取在普通 <a> 上没有：悬停 / 触摸 / 聚焦时预取目标页的 RSC 载荷
-  // （目标页的 blocks.json 由根布局的 StaticBlockPrefetch 同时预取）
-  const onIntent = (e: SyntheticEvent<HTMLElement>) => {
-    const href = internalLink(e);
-    if (!href || prefetched.has(href)) return;
-    prefetched.add(href);
-    router.prefetch(href);
-  };
-
   if (html === ABSENT) return null;
 
   return createElement(as, {
@@ -197,8 +190,5 @@ export default function StaticBlock({ src, id, as = "div", className, ssrOnly, t
     suppressHydrationWarning: true,
     dangerouslySetInnerHTML: html,
     onClick: ssrOnly ? undefined : onClick,
-    onMouseOver: ssrOnly ? undefined : onIntent,
-    onTouchStart: ssrOnly ? undefined : onIntent,
-    onFocus: ssrOnly ? undefined : onIntent,
   });
 }

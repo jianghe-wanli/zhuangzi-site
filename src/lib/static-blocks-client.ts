@@ -11,6 +11,10 @@ export type Blocks = Record<string, string>;
 /** 已知的块内容（水合时从 DOM 采集，或由 blocks.json 取回），键为 `${src}#${id}` */
 export const known = new Map<string, Html>();
 export const pending = new Map<string, Promise<Blocks>>();
+/** 用户点的链接带的 #锚点（按目标页 src 记）：取回失败改走整页加载时带上 */
+export const intendedHash = new Map<string, string>();
+/** 内容已在手（水合时采集过）的页面：不必再预取 */
+export const captured = new Set<string>();
 
 export function fetchBlocks(src: string, init?: RequestInit): Promise<Blocks> {
   return fetch(src, init)
@@ -30,7 +34,7 @@ export function fetchBlocks(src: string, init?: RequestInit): Promise<Blocks> {
  * 失败静默丢弃 —— 真正渲染时会重取。
  */
 export function prefetchBlocks(src: string): void {
-  if (pending.has(src)) return;
+  if (pending.has(src) || captured.has(src)) return;
   const p = fetchBlocks(src);
   pending.set(src, p);
   p.catch(() => {
