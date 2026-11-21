@@ -1,7 +1,7 @@
 import type { Passage, WordAnnotation } from "@/lib/chapters";
 import { findKaoju, type KaojuEntry } from "@/lib/kaoju-utils";
 import { renderEmphasis } from "@/lib/markup";
-import { internalHref, renderStatic } from "@/lib/static-html";
+import { internalHref, renderStatic, staticBlocksRev } from "@/lib/static-html";
 
 import AnnotationPanel from "./AnnotationPanel";
 import { StaticConceptTag } from "./ConceptTag";
@@ -401,6 +401,7 @@ export default function PassageView({ passage, chapterId, chapterTitle, passageN
   const translationCount = (passage.translations?.length ?? 0) + 1;
   const hasCommentary = Boolean(passage.commentary) || splitAnnotations(passage.original, passage.annotations).unmatched.length > 0;
   const id = passage.id;
+  const rev = staticBlocksRev(src);
 
   return (
     // 附加字面 group 类：globals.css 的 .group:hover > .passage-toolbar
@@ -420,20 +421,20 @@ export default function PassageView({ passage, chapterId, chapterTitle, passageN
           {/* Original */}
           <div className="original-block min-w-0">
             <div className="original-label text-[10px] font-medium text-[var(--text-muted)] tracking-[0.1em] uppercase mb-2">原文</div>
-            <StaticBlock src={src} id={`${id}-o`} className="annotated-original" />
+            <StaticBlock src={src} rev={rev} id={`${id}-o`} className="annotated-original" />
             {/* 拼音版原文（默认隐藏；切到 pinyin-on 时经 MutationObserver 挂载） */}
             <PinyinSlot />
           </div>
           {/* Translation */}
           <div className="translation-block min-w-0 border-l-2 border-[var(--border-light)] pl-4 sm:pl-6">
             <div className="translation-label text-[10px] font-medium text-[var(--text-muted)] tracking-[0.1em] uppercase mb-2">译文</div>
-            <StaticBlock src={src} id={`${id}-t`} as="p" className="translation-text reading-prose" />
+            <StaticBlock src={src} rev={rev} id={`${id}-t`} as="p" className="translation-text reading-prose" />
             <TranslationCompare chapterId={chapterId} passageId={id} count={translationCount} />
           </div>
         </div>
 
         {/* 注疏 + 要义 */}
-        {hasCommentary && <StaticBlock src={src} id={`${id}-c`} />}
+        {hasCommentary && <StaticBlock src={src} rev={rev} id={`${id}-c`} />}
 
         {/* 段落级注（陈鼓应 + 方勇，懒加载） */}
         <div className="mb-5">
@@ -447,7 +448,7 @@ export default function PassageView({ passage, chapterId, chapterTitle, passageN
 
         {/* Concept tags */}
         {passage.concepts.length > 0 && (
-          <StaticBlock src={src} id={`${id}-g`} className="flex flex-wrap gap-1.5 mb-5" />
+          <StaticBlock src={src} rev={rev} id={`${id}-g`} className="flex flex-wrap gap-1.5 mb-5" />
         )}
 
         {/* 批注面板（默认隐藏；切到 annotation-on 时经 CSS 显示） */}

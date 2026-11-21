@@ -15,7 +15,7 @@ import { chapters } from "@/data/chapters";
 import { getAdjacentChapters } from "@/lib/chapters";
 import { getPassageKaojuFangMap, getPassageKaojuMap } from "@/lib/kaoju";
 import { canonicalUrl, ogImageFor, SITE_NAME } from "@/lib/site";
-import { registerStaticBlocks } from "@/lib/static-html";
+import { registerStaticBlocks, staticBlocksRev } from "@/lib/static-html";
 
 import { chapterBlocks, chapterBlocksSrc, chapterConceptIds, chapterJsonLd } from "./blocks";
 
@@ -83,10 +83,11 @@ export default async function ChapterPage({ params }: Props) {
   // 本组件输出的只有骨架与各客户端岛的标量 props。
   const src = chapterBlocksSrc(chapter.id);
   registerStaticBlocks(src, { ...chapterBlocks(chapter), ld: chapterJsonLd(chapter) });
+  const rev = staticBlocksRev(src);
 
   return (
     <>
-      <StaticBlock src={src} id="ld" as="script" type="application/ld+json" ssrOnly />
+      <StaticBlock src={src} rev={rev} id="ld" as="script" type="application/ld+json" ssrOnly />
       <ChapterTOC items={tocItems} />
       <ScholarMarginNotes
         chapterId={chapter.id}
@@ -100,7 +101,7 @@ export default async function ChapterPage({ params }: Props) {
 
       <div className="chapter-content-container max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 pb-24 sm:pb-14">
         {/* 篇首 + 题解 */}
-        <StaticBlock src={src} id="head" />
+        <StaticBlock src={src} rev={rev} id="head" />
 
         {/* Passages */}
         <div className="vertical-content">
@@ -129,7 +130,7 @@ export default async function ChapterPage({ params }: Props) {
         {/* 本篇总结 */}
         {chapter.conclusion && (
           <StaticBlock
-            src={src}
+            src={src} rev={rev}
             id="conclusion"
             as="section"
             className="cv-auto scroll-mt-24 mt-16 pt-8 border-t border-[var(--border-light)]"
@@ -141,7 +142,7 @@ export default async function ChapterPage({ params }: Props) {
         </div>
 
         <StaticBlock
-          src={src}
+          src={src} rev={rev}
           id="nav"
           as="nav"
           className="cv-auto mt-14 pt-6 border-t border-[var(--border-light)] flex items-center justify-between"

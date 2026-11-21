@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import Navigation from "@/components/Navigation";
 import ReadingProgress from "@/components/ReadingProgress";
 import ShortcutsHelp from "@/components/ShortcutsHelp";
+import StaticBlockPrefetch from "@/components/StaticBlockPrefetch";
 import SWRegister from "@/components/SWRegister";
 import { FONT_FACE_CSS } from "@/lib/font-faces";
 import { canonicalUrl, OG_IMAGE, SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
@@ -187,6 +188,7 @@ export default function RootLayout({
         <ChatFab />
         <ShortcutsHelp />
         <SWRegister />
+        <StaticBlockPrefetch />
       </body>
     </html>
   );

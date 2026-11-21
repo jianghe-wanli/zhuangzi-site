@@ -28,6 +28,22 @@ function registry(): Registry {
 export function registerStaticBlocks(src: string, blocks: Record<string, string>): void {
   const reg = registry();
   for (const [id, html] of Object.entries(blocks)) reg.set(`${src}#${id}`, html);
+  if (process.env.NODE_ENV === "development") reg.set(`${src}#$rev`, fingerprint(Object.values(blocks).join("\u0000")));
+}
+
+/**
+ * 开发模式下本页静态块的内容指纹，传给 <StaticBlock rev>：HMR 改了块内容时
+ * 客户端据此重取 blocks.json。生产构建恒返回 undefined（不进 RSC 载荷）。
+ */
+export function staticBlocksRev(src: string): string | undefined {
+  if (process.env.NODE_ENV !== "development") return undefined;
+  return registry().get(`${src}#$rev`);
+}
+
+function fingerprint(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
 }
 
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);

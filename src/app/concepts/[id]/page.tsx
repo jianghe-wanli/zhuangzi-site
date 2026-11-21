@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import StaticBlock from "@/components/StaticBlock";
 import { concepts } from "@/data/concepts";
 import { canonicalUrl, ogImageFor, SITE_NAME } from "@/lib/site";
-import { registerStaticBlocks } from "@/lib/static-html";
+import { registerStaticBlocks, staticBlocksRev } from "@/lib/static-html";
 
 import { conceptBlocks, conceptBlocksSrc, conceptJsonLd } from "./blocks";
 
@@ -54,11 +54,12 @@ export default async function ConceptPage({ params }: Props) {
   // （/concepts/dao 原先 HTML 的 55% 是同一份正文的 RSC 副本）。
   const src = conceptBlocksSrc(concept.id);
   registerStaticBlocks(src, { ...conceptBlocks(concept), ld: conceptJsonLd(concept) });
+  const rev = staticBlocksRev(src);
 
   return (
     <>
-      <StaticBlock src={src} id="ld" as="script" type="application/ld+json" ssrOnly />
-      <StaticBlock src={src} id="body" className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16" />
+      <StaticBlock src={src} rev={rev} id="ld" as="script" type="application/ld+json" ssrOnly />
+      <StaticBlock src={src} rev={rev} id="body" className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16" />
     </>
   );
 }
