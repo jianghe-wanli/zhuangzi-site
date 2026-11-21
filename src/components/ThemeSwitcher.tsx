@@ -17,6 +17,7 @@ export default function ThemeSwitcher() {
   const { theme, setTheme, mounted } = useTheme();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   // 点击外部 / Escape 关闭弹层
   useEffect(() => {
@@ -25,7 +26,20 @@ export default function ThemeSwitcher() {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        // 焦点若在弹层内，弹层卸载后会丢到 <body>；还给触发按钮
+        triggerRef.current?.focus();
+        return;
+      }
+      // radiogroup 约定：方向键在选项间移动
+      if (!e.key.startsWith("Arrow")) return;
+      const radios = Array.from(ref.current?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []);
+      const i = radios.indexOf(document.activeElement as HTMLElement);
+      if (i < 0) return;
+      e.preventDefault();
+      const step = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : -1;
+      radios[(i + step + radios.length) % radios.length]?.focus();
     };
     document.addEventListener("mousedown", onMouseDown);
     document.addEventListener("keydown", onKeyDown);
@@ -40,6 +54,7 @@ export default function ThemeSwitcher() {
   return (
     <div ref={ref} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="配色主题"
@@ -84,6 +99,7 @@ export default function ThemeSwitcher() {
                   onClick={() => {
                     setTheme(key);
                     setOpen(false);
+                    triggerRef.current?.focus();
                   }}
                   className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${
                     selected
