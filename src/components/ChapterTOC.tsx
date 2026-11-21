@@ -51,7 +51,7 @@ export default function ChapterTOC({ items }: ChapterTOCProps) {
   if (items.length <= 1) return null;
 
   return (
-    <div className={`chapter-toc hidden lg:block fixed right-4 top-24 z-30 transition-all ${collapsed ? "w-8" : "w-48"}`}>
+    <nav aria-label="章节目录" className={`chapter-toc hidden lg:block fixed right-4 top-24 z-30 transition-all ${collapsed ? "w-8" : "w-48"}`}>
       <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)]/95 backdrop-blur-sm shadow-lg overflow-hidden">
         {/* Header */}
         <button
@@ -76,6 +76,7 @@ export default function ChapterTOC({ items }: ChapterTOCProps) {
               <a
                 key={p.id}
                 href={`#passage-${p.id}`}
+                aria-current={activeId === `passage-${p.id}` ? "location" : undefined}
                 onClick={(e) => {
                   e.preventDefault();
                   document.getElementById(`passage-${p.id}`)?.scrollIntoView({ behavior: "smooth" });
@@ -93,6 +94,6 @@ export default function ChapterTOC({ items }: ChapterTOCProps) {
           </div>
         )}
       </div>
-    </div>
+    </nav>
   );
 }

@@ -57,10 +57,12 @@ export default function AnnotationPanel({
           <span className="seal-char" aria-hidden="true">注</span>批注
         </span>
         <button
+          type="button"
           onClick={closePanel}
+          aria-label="关闭批注"
           className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
         >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg aria-hidden="true" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
@@ -69,6 +71,7 @@ export default function AnnotationPanel({
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
+        aria-label="批注内容"
         placeholder="写下你的感悟…"
         rows={3}
         className="w-full text-sm bg-transparent border border-[var(--border-color)] rounded px-3 py-2 text-[var(--text-primary)] placeholder-[var(--text-secondary)] focus:outline-none focus:ring-1 focus:ring-[var(--text-accent)] resize-none"
