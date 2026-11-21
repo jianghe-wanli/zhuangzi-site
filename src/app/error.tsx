@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 /**
  * 根错误边界（app/error.tsx）。
  *
@@ -16,11 +18,17 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // 留一条可排查的记录（此前错误被边界吞掉，控制台里什么都没有）
+  useEffect(() => {
+    console.error(error);
+  }, [error]);
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
-      <h2 className="text-xl font-semibold text-[var(--text-accent)] tracking-wide mb-3">
+    <div role="alert" className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
+      {/* 错误态下它是本页唯一标题 */}
+      <h1 className="text-xl font-semibold text-[var(--text-accent)] tracking-wide mb-3">
         抱朴守拙
-      </h2>
+      </h1>
       <p className="text-sm text-[var(--text-secondary)] max-w-md mb-2">
         页面暂时出了点问题，请刷新重试。
       </p>
@@ -30,6 +38,7 @@ export default function Error({
         </p>
       )}
       <button
+        type="button"
         onClick={reset}
         className="px-4 py-2 text-sm rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:border-[var(--text-accent)] hover:text-[var(--text-accent)] transition-colors"
       >
