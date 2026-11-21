@@ -1,9 +1,9 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 
 import { subscribePassageClass } from "@/lib/passage-dom";
+import { useLazyComponent } from "@/lib/use-lazy-component";
 
 import type { ScholarMarginNotesProps } from "./ScholarMarginNotes";
 
@@ -13,6 +13,9 @@ import type { ScholarMarginNotesProps } from "./ScholarMarginNotes";
  * 朱批合参栏、划词菜单、批注面板三者首屏都不可见（或只是一枚按钮），
  * 代码却随篇章页首屏下载并水合。这里各留一个极小的外壳监听触发条件，
  * 真正的组件在首次需要时才动态加载。
+ *
+ * 用 useLazyComponent 而不是 next/dynamic：chunk 取不到时（离线、部署后旧 chunk 已下线）
+ * 只是「没加载出来」，下次触发会重试，不会在渲染期抛错把整页换成错误页。
  */
 
 /* ---------- 朱批合参（ScholarMarginNotes） ---------- */
@@ -32,28 +35,25 @@ function ScholarButton({ onClick }: { onClick?: () => void }) {
   );
 }
 
-const ScholarMarginNotes = dynamic(() => import("./ScholarMarginNotes"), {
-  ssr: false,
-  loading: () => <ScholarButton />,
-});
+const loadScholarMarginNotes = () => import("./ScholarMarginNotes");
 
 /**
  * 窄屏（<1536px）：只渲染朱印按钮，点击才加载面板。
  * 宽屏（≥1536px）：常驻侧栏，页面空闲后加载。
  */
 export function ScholarMarginNotesLazy(props: ScholarMarginNotesProps) {
-  const [load, setLoad] = useState<null | { open: boolean }>(null);
+  const [Panel, loadPanel] = useLazyComponent(loadScholarMarginNotes);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const lastTerm = useRef<string | null>(null);
 
   useEffect(() => {
-    if (load) return;
+    if (Panel) return;
     const mql = window.matchMedia("(min-width: 1536px)");
     let idle = 0;
     const check = () => {
       if (!mql.matches || idle) return;
-      const run = () => setLoad((v) => v ?? { open: false });
       // Safari 没有 requestIdleCallback
-      idle = window.setTimeout(run, 1200);
+      idle = window.setTimeout(loadPanel, 1200);
     };
     check();
     mql.addEventListener("change", check);
@@ -68,40 +68,49 @@ export function ScholarMarginNotesLazy(props: ScholarMarginNotesProps) {
       window.removeEventListener("zhuangzi:focus-term", onTerm);
       window.clearTimeout(idle);
     };
-  }, [load]);
+  }, [Panel, loadPanel]);
 
-  if (!load) return <ScholarButton onClick={() => setLoad({ open: true })} />;
+  if (!Panel) {
+    return (
+      <ScholarButton
+        onClick={() => {
+          setDrawerOpen(true);
+          loadPanel();
+        }}
+      />
+    );
+  }
   // eslint-disable-next-line react-hooks/refs -- 只在首次挂载时读一次，作为初始值
-  return <ScholarMarginNotes {...props} initialDrawerOpen={load.open} initialTerm={lastTerm.current} />;
+  return <Panel {...props} initialDrawerOpen={drawerOpen} initialTerm={lastTerm.current} />;
 }
 
 /* ---------- 划词菜单（SelectionPopover） ---------- */
 
-const SelectionPopover = dynamic(() => import("./SelectionPopover"), { ssr: false, loading: () => null });
+const loadSelectionPopover = () => import("./SelectionPopover");
 
 /** 首次在原文 / 译文里选中文字时才加载划词菜单 */
 export function SelectionPopoverLazy(props: { chapterId: string; chapterTitle: string }) {
-  const [load, setLoad] = useState(false);
+  const [Popover, loadPopover] = useLazyComponent(loadSelectionPopover);
 
   useEffect(() => {
-    if (load) return;
+    if (Popover) return;
     const onSelection = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
       const node = sel.focusNode;
       const el = node instanceof Element ? node : node?.parentElement;
-      if (el?.closest(".original-text, .translation-text")) setLoad(true);
+      if (el?.closest(".original-text, .translation-text")) loadPopover();
     };
     document.addEventListener("selectionchange", onSelection);
     return () => document.removeEventListener("selectionchange", onSelection);
-  }, [load]);
+  }, [Popover, loadPopover]);
 
-  return load ? <SelectionPopover {...props} /> : null;
+  return Popover ? <Popover {...props} /> : null;
 }
 
 /* ---------- 批注面板（AnnotationPanel） ---------- */
 
-const AnnotationPanel = dynamic(() => import("./AnnotationPanel"), { ssr: false, loading: () => null });
+const loadAnnotationPanel = () => import("./AnnotationPanel");
 
 /**
  * 批注面板槽位：段落根节点首次切到 .annotation-on 时才挂载面板
@@ -109,23 +118,23 @@ const AnnotationPanel = dynamic(() => import("./AnnotationPanel"), { ssr: false,
  * 挂载后保留，显示 / 隐藏仍由 CSS 控制。
  */
 export function AnnotationSlot({ chapterId, passageId }: { chapterId: string; passageId: string }) {
-  const [mounted, setMounted] = useState(false);
+  const [Panel, loadPanel] = useLazyComponent(loadAnnotationPanel);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (mounted) return;
+    if (Panel) return;
     const root = ref.current?.closest("[data-passage-root]");
     if (!root) return;
     const update = () => {
-      if (root.classList.contains("annotation-on")) setMounted(true);
+      if (root.classList.contains("annotation-on")) loadPanel();
     };
     update();
     return subscribePassageClass(root, update);
-  }, [mounted]);
+  }, [Panel, loadPanel]);
 
   return (
     <div ref={ref} className="annotation-panel">
-      {mounted && <AnnotationPanel chapterId={chapterId} passageId={passageId} />}
+      {Panel && <Panel chapterId={chapterId} passageId={passageId} />}
     </div>
   );
 }

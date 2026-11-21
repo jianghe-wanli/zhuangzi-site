@@ -1,7 +1,7 @@
 {
   "updatedAt": "2026-11-21",
-  "sharedJsGzipKB": 149.3,
-  "worstRoute": "/concepts/dao",
-  "worstRouteTotalGzipKB": 268.8,
-  "totalOutputMB": 41
+  "sharedJsGzipKB": 146.4,
+  "worstRoute": "/chapters/01-xiaoyao-you",
+  "worstRouteTotalGzipKB": 222.6,
+  "totalOutputMB": 26.3
 }

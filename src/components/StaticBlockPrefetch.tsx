@@ -1,17 +1,22 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
+import { clearNavigating, markNavigating } from "@/lib/route-progress";
 import { blocksSrcForPath, intendedHash, prefetchBlocks } from "@/lib/static-blocks-client";
 
 /**
- * 静态块预取（挂在根布局，全站生效，无 UI）。
+ * 静态块预取 + 路由进度标记（挂在根布局，全站生效，无 UI）。
  *
  * 篇章页 / 概念页的正文不在 RSC 载荷里，客户端路由进入时要另取 blocks.json。
  * 这里在用户对站内链接表现出意图时（悬停、触摸、键盘聚焦，以及点击本身），
  * 以及 Next 开始取目标页 RSC 载荷时（覆盖 router.push 与前进 / 后退），
  * 立即开始取 blocks.json 和 StaticBlock 的代码 chunk，与 RSC 载荷并行到达 ——
  * 否则是「RSC → 发现要 StaticBlock chunk → 渲染后才取 blocks.json」三个串行往返。
+ *
+ * 同一个信号（Next 开始取另一个页面的 RSC 载荷）也用来点亮顶部的路由进度条，
+ * 换页完成（pathname 变化）或请求失败时收起，见 lib/route-progress.ts。
  *
  * 不在这里调 router.prefetch：Next 16 的预取是 4 级串行的分段请求（Fast 3G 下约 2.3 秒），
  * 悬停 300 ms 内点击时帮不上忙，还会与正文抢带宽。
@@ -39,7 +44,26 @@ function warm(src: string, path: string, navigating: boolean) {
   else prefetchBlocks(src);
 }
 
+const stripSlash = (p: string) => p.replace(/\/+$/, "");
+
+/**
+ * Next 的预取请求带 Next-Router-Prefetch / Next-Router-Segment-Prefetch 头：那不是用户发起的导航。
+ * 视口内的 <Link> 会成批预取（/__next._tree.txt 等分段载荷），不能据此去取正文或点亮进度条。
+ */
+function isPrefetch(input: RequestInfo | URL, init: RequestInit | undefined): boolean {
+  const h = init?.headers ?? (input instanceof Request ? input.headers : undefined);
+  if (!h) return false;
+  const names = h instanceof Headers ? [...h.keys()] : Array.isArray(h) ? h.map(([k]) => k) : Object.keys(h);
+  return names.some((k) => /^next-router-(segment-)?prefetch$/i.test(k));
+}
+
+/** RSC 载荷地址 → 页面路径：…/index.txt 与 Next 16.4 的分段载荷 …/__next.<段>.txt 都落在页面目录下 */
+const pagePathOfPayload = (pathname: string) => pathname.replace(/(?:index|__next\.[^/]*)\.txt$/, "");
+
 export default function StaticBlockPrefetch() {
+  const pathname = usePathname();
+  useEffect(() => clearNavigating, [pathname]);
+
   useEffect(() => {
     const onIntent = (e: Event) => {
       const a = (e.target as Element | null)?.closest?.("a[href]");
@@ -61,17 +85,28 @@ export default function StaticBlockPrefetch() {
     // Next 取目标页 RSC 载荷（…/index.txt?_rsc=…）的那一刻就是最早的信号：同时开始取 blocks.json。
     const nativeFetch = window.fetch;
     const hookedFetch: typeof window.fetch = function (this: unknown, input, init) {
+      let navigating = false;
       try {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.includes("_rsc=")) {
           const u = new URL(url, window.location.href);
-          const src = u.origin === window.location.origin ? blocksSrcForPath(u.pathname.replace(/index\.txt$/, "")) : null;
-          if (src && blocksSrcForPath(window.location.pathname) !== src) warm(src, u.pathname, true);
+          if (u.origin === window.location.origin && !isPrefetch(input, init)) {
+            const target = pagePathOfPayload(u.pathname);
+            const src = blocksSrcForPath(target);
+            if (src && blocksSrcForPath(window.location.pathname) !== src) warm(src, target, true);
+            if (stripSlash(target) !== stripSlash(window.location.pathname)) {
+              navigating = true;
+              markNavigating();
+            }
+          }
         }
       } catch {
         /* 只是预取提示，任何异常都不能影响原请求 */
       }
-      return nativeFetch.call(this, input, init);
+      const res = nativeFetch.call(this, input, init);
+      // 载荷取不到时 Next 会改走整页跳转或停在原页，进度条不该一直挂着
+      if (navigating) res.catch(clearNavigating);
+      return res;
     };
     window.fetch = hookedFetch;
 

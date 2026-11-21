@@ -97,6 +97,13 @@ node scripts/check-passage-regression.mjs  # 章节页产物结构回归
   （每路由 RSC 载荷含骨架段），预算检查全过。
 - 验收 ✅：`grep` 确认骨架 fallback 已进全部路由 RSC 载荷（`*.txt`）；
   产物自检/预算/段落回归全过。
+- **2026-11 修订：骨架屏改为顶部路由进度条。** 实测上面「首屏直接命中预渲染
+  HTML」不成立：根级 `loading.tsx` 的 Suspense 边界让全部 86 个页面的正文落进
+  `<div hidden id="S:0">`，靠页尾内联脚本换入 —— 禁用 JS 时全站只剩骨架，
+  每页多约 5 KB HTML 与 2 个内联脚本（全站 525 → 351 个）。现已删除
+  `loading.tsx`，导航反馈改由 `html[data-navigating]` 驱动的 2px 顶部进度条提供
+  （`src/lib/route-progress.ts` + `StaticBlockPrefetch` 里已有的 RSC 请求钩子，
+  零额外监听；`globals.css` 的 `.skeleton` 一并移除）。
 
 ### 1.5 功能批次：书斋管理 + 名句标记 + 搜索联想等七项（2026-08-22 第三轮）✅
 

@@ -452,18 +452,24 @@ html {
 }
 
 /* ============================================
-   导航加载骨架（src/app/loading.tsx）
-   基色始终可见；脉冲只在 1 ↔ 0.55 间呼吸，
-   prefers-reduced-motion 下被上方全局规则冻结在基色，不会消失。
+   客户端路由进度条（html[data-navigating]，见 src/lib/route-progress.ts）
+   延迟 120ms 才出现：载荷已缓存的瞬时切换不闪一下。
    ============================================ */
-.skeleton {
-  background-color: var(--border-light);
-  animation: skeleton-pulse 1.8s var(--ease-spring) infinite;
+html[data-navigating]::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 70;
+  height: 2px;
+  background: var(--text-accent);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  animation: route-progress 6s cubic-bezier(0.1, 0.8, 0.2, 1) 0.12s forwards;
+  pointer-events: none;
 }
 
-@keyframes skeleton-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+@keyframes route-progress {
+  to { transform: scaleX(0.92); }
 }
 
 /* ============================================
