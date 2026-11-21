@@ -1,21 +1,20 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
+
+import { useLazyComponent } from "@/lib/use-lazy-component";
 
 // 聊天面板真正按需加载：ChatWithZhuangzi 内部静态引用 search → 全量章节索引，
 // 仅在用户点击右下角「问庄子」悬浮球或触发划词提问时才动态挂载拉取该 chunk，
 // 首屏零聊天引擎与零检索语料开销。
-const ChatWithZhuangzi = dynamic(() => import("./ChatWithZhuangzi"), {
-  ssr: false,
-  loading: () => null,
-});
+const loadChat = () => import("./ChatWithZhuangzi");
 
 /** 聊天球挂载点（client 叶子组件，首次激活前仅渲染轻量悬浮按钮） */
 export default function ChatFab() {
   const [activated, setActivated] = useState(false);
   const [initialQuestion, setInitialQuestion] = useState<string | undefined>(undefined);
   const [forceOpen, setForceOpen] = useState(false);
+  const [ChatWithZhuangzi, load] = useLazyComponent(loadChat);
 
   useEffect(() => {
     const handleAskSelection = (e: Event) => {
@@ -28,6 +27,7 @@ export default function ChatFab() {
         setInitialQuestion(q);
         setForceOpen(true);
         setActivated(true);
+        load();
       }
     };
 
@@ -35,9 +35,11 @@ export default function ChatFab() {
     return () => {
       window.removeEventListener("zhuangzi:ask-selection", handleAskSelection);
     };
-  }, []);
+  }, [load]);
 
-  if (!activated) {
+  // 面板 chunk 就绪前悬浮球一直留在原位（此前点击后球先消失、面板稍后才出现，
+  // 慢网下右下角会空一段时间；chunk 取不到时球就再也回不来）
+  if (!activated || !ChatWithZhuangzi) {
     return (
       <div className="fixed bottom-4 right-4 z-50 no-print chat-fab">
         <button
@@ -45,7 +47,12 @@ export default function ChatFab() {
           onClick={() => {
             setForceOpen(true);
             setActivated(true);
+            load();
           }}
+          // 悬停 / 聚焦即预取，点击时面板基本已就绪
+          onPointerEnter={load}
+          onFocus={load}
+          aria-busy={activated}
           aria-label="打开「问庄子」对话"
           aria-expanded={false}
           className="w-11 h-11 rounded-full bg-[var(--text-accent)] text-[var(--btn-accent-text,#ffffff)] shadow-md hover:shadow-lg hover:opacity-90 transition-all flex items-center justify-center cursor-pointer"

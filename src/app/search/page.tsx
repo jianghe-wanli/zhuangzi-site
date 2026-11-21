@@ -1,84 +1,19 @@
-"use client";
-
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useEffect,useState } from "react";
+import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import SearchBar from "@/components/SearchBar";
-import { search, type SearchResult } from "@/lib/search";
+import { buildPageMetadata } from "@/lib/site";
 
-function SearchContent() {
-  const searchParams = useSearchParams();
-  const initialQuery = searchParams.get("q") || "";
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [searched, setSearched] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+import SearchResults from "./SearchResults";
 
-  useEffect(() => {
-    if (initialQuery) {
-      // URL 参数触发数据加载，先置 loading（挂载后执行）
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLoading(true);
-      setError(null);
-      search(initialQuery)
-        .then((r) => {
-          setResults(r);
-          setSearched(true);
-        })
-        .catch((e) => {
-          console.error("[Search]", e);
-          setError("搜索索引加载失败，请刷新重试");
-        })
-        .finally(() => setLoading(false));
-    }
-  }, [initialQuery]);
+export const metadata: Metadata = buildPageMetadata({
+  title: "全文搜索",
+  description:
+    "检索《庄子》三十三篇的原文、白话翻译与历代注疏，支持模糊匹配与按内篇/外篇/杂篇、核心概念筛选。",
+  path: "/search",
+  index: false,
+});
 
-  // Extract snippet around the matched keyword
-  const getSnippet = (text: string, q: string, maxLen = 120) => {
-    if (!q.trim()) return text.slice(0, maxLen);
-    const idx = text.indexOf(q);
-    if (idx === -1) return text.slice(0, maxLen);
-    const half = Math.floor(maxLen / 2);
-    const start = Math.max(0, idx - half);
-    const end = Math.min(text.length, idx + q.length + half);
-    let snippet = text.slice(start, end);
-    if (start > 0) snippet = "…" + snippet;
-    if (end < text.length) snippet = snippet + "…";
-    return snippet;
-  };
-
-  const highlightMatch = (text: string, q: string) => {
-    if (!q.trim()) return text;
-    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(`(${escaped})`, "i");
-    const parts = text.split(regex);
-    // split 带捕获组时，匹配项必落在奇数下标，直接 i % 2 === 1 判断，
-    // 规避全局正则 test() 的 lastIndex 陷阱（视觉复审 N3）
-    return parts.map((part, i) =>
-      i % 2 === 1 ? (
-        <mark
-          key={i}
-          className="bg-[var(--text-accent)]/15 text-[var(--text-accent)] rounded px-0.5"
-        >
-          {part}
-        </mark>
-      ) : (
-        part
-      )
-    );
-  };
-
-  const getFieldLabel = (field: string) => {
-    switch (field) {
-      case "original": return "原文";
-      case "translation": return "译文";
-      case "commentary": return "解读";
-      default: return "";
-    }
-  };
-
+export default function SearchPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
       <div className="text-center mb-10">
@@ -91,72 +26,22 @@ function SearchContent() {
         <div className="ink-divider" />
       </div>
 
-      <div className="mb-8 flex justify-center">
-        <SearchBar compact initialValue={initialQuery} />
-      </div>
-
-      {loading && (
-        <div className="mb-6 text-center text-sm text-[var(--text-secondary)]">
-          正在加载搜索索引…
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-6 text-center text-sm text-[var(--color-danger)]">
-          {error}
-        </div>
-      )}
-
-      {searched && !error && (
-        <div className="mb-6 text-center" role="status" aria-live="polite">
-          <p className="text-sm text-[var(--text-secondary)]">
-            {results.length === 0
-              ? `未找到与「${initialQuery}」相关的内容`
-              : `找到 ${results.length} 条与「${initialQuery}」相关的结果`}
-          </p>
-        </div>
-      )}
-
-      <div className="space-y-4">
-        {results.map((result, idx) => (
-          <Link
-            key={`${result.chapterId}-${result.passageId}-${idx}`}
-            href={`/chapters/${result.chapterId}#passage-${result.passageId}`}
-            className="card-interactive group block p-5"
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-sm font-semibold text-[var(--text-accent)] tracking-wide">
-                {result.chapterTitle}
-              </span>
-              <span className="tag">
-                {getFieldLabel(result.matchField)}
-              </span>
-            </div>
-            <p className="text-sm text-[var(--text-primary)] leading-[1.9] tracking-wide font-serif mb-2">
-              {highlightMatch(getSnippet(result.original, initialQuery), initialQuery)}
-            </p>
-            {/* 译文只作对照展示，不高亮 —— 搜索只匹配原文，
-                译文里恰有同词并不代表该段因译文命中 */}
-            <p className="text-xs text-[var(--text-secondary)] leading-relaxed line-clamp-2">
-              {result.translation}
-            </p>
-          </Link>
-        ))}
+      {/* useSearchParams 需要 Suspense 边界；标题区由 server 直出，不随之退化成 fallback */}
+      {/* 带查询词进入时先把结果区撑到一屏高：结果由客户端渲染，否则页脚会被结果列表整体推走（CLS） */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `if(/[?&]q=[^&]/.test(location.search))document.documentElement.dataset.searching=""`,
+        }}
+      />
+      <div className="[html[data-searching]_&]:min-h-screen">
+      <Suspense
+        fallback={
+          <p className="py-12 text-center text-sm text-[var(--text-muted)] animate-pulse">正在加载搜索…</p>
+        }
+      >
+        <SearchResults />
+      </Suspense>
       </div>
     </div>
-  );
-}
-
-export default function SearchPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
-          <p className="text-sm text-[var(--text-muted)] animate-pulse">正在加载搜索…</p>
-        </div>
-      }
-    >
-      <SearchContent />
-    </Suspense>
   );
 }

@@ -8,12 +8,18 @@
    - "Zhuangzi Serif"：专供 h1/h2、古籍原文（.original-text）、篆印、双行夹注、竖排提字；
    - "Zhuangzi Rare"：仅包含 GB2312 之外的古籍异体/生僻字，挂载于 --font-serif 末尾，
      常规现代白话在任何系统均零网络请求，仅在遇到超纲生僻字时按需拉取单片；
-3. 所有分片均使用严格不重叠的精确 unicode-range，内联 CSS 仅约 5KB gzip，外部 stylesheet <= 20KB。
+3. 所有分片均使用严格不重叠的精确 unicode-range；
+4. @font-face 规则输出为 src/app/font-faces.css，由 globals.css @import 并入外置样式表
+   （内容哈希命名、不可变缓存）。此前内联在根布局 <head>：约 24KB 的规则在每个页面的
+   HTML 里出现两次（<head> 一次、RSC 载荷再一次），每页多付约 15KB gzip 且无法跨页缓存；
+5. 分片文件名带内容哈希（zhuangzi-cls-00.<sha8>.woff2）：_headers 对 *.woff2 下发
+   immutable 长缓存、SW 走 Cache-First，文件名不变而内容变化会让老访客永远拿旧字形。
 
 用法：
   python scripts/subset-font.py
 """
 import glob
+import hashlib
 import json
 import os
 import re
@@ -31,7 +37,8 @@ FONT_SRC = os.path.join(ROOT, "scripts", "fonts", "NotoSerifSC.ttf")
 SLICES_DIR = os.path.join(ROOT, "public", "fonts", "slices")
 LEGACY_FONT = os.path.join(ROOT, "public", "fonts", "zhuangzi-serif.woff2")
 LEGACY_CSS = os.path.join(ROOT, "src", "app", "fonts.css")
-TS_OUT = os.path.join(ROOT, "src", "lib", "font-faces.ts")
+LEGACY_TS = os.path.join(ROOT, "src", "lib", "font-faces.ts")
+CSS_OUT = os.path.join(ROOT, "src", "app", "font-faces.css")
 
 SLICE_SIZE = 150
 
@@ -192,6 +199,15 @@ def format_exact_unicode_range(chars: list[str]) -> str:
     )
 
 
+def hashed_name(path: str) -> str:
+    """把分片重命名为带内容哈希的文件名，返回新文件名。"""
+    with open(path, "rb") as f:
+        digest = hashlib.sha256(f.read()).hexdigest()[:8]
+    new_path = re.sub(r"\.woff2$", f".{digest}.woff2", path)
+    os.replace(path, new_path)
+    return os.path.basename(new_path)
+
+
 def save_woff2(base_ttf: str, chars: list[str], out_path: str) -> int:
     tt = TTFont(base_ttf)
     opts = Options()
@@ -218,7 +234,7 @@ def main():
     if os.path.exists(SLICES_DIR):
         shutil.rmtree(SLICES_DIR)
     os.makedirs(SLICES_DIR, exist_ok=True)
-    for legacy in (LEGACY_FONT, LEGACY_CSS):
+    for legacy in (LEGACY_FONT, LEGACY_CSS, LEGACY_TS):
         if os.path.exists(legacy):
             os.remove(legacy)
 
@@ -237,36 +253,34 @@ def main():
         for idx, chunk in enumerate(classical_slices):
             fname = f"zhuangzi-cls-{idx:02d}.woff2"
             sz = save_woff2(tmp_base, chunk, os.path.join(SLICES_DIR, fname))
+            fname = hashed_name(os.path.join(SLICES_DIR, fname))
             total_bytes += sz
             urange = format_exact_unicode_range(chunk)
             css_rules.append(
-                f'@font-face{{font-family:"Zhuangzi Serif";src:{local_src},url("/fonts/slices/{fname}") format("woff2");font-weight:400 700;font-style:normal;font-display:swap;unicode-range:{urange}}}'
+                f'@font-face{{font-family:"Zhuangzi Serif";src:{local_src},url("/fonts/slices/{fname}") format("woff2");font-weight:400 700;font-display:swap;unicode-range:{urange}}}'
             )
             print(f"  [cls-{idx:02d}]  {len(chunk):3d} chars: {sz/1024:5.1f} KB")
 
         for idx, chunk in enumerate(rare_slices):
             fname = f"zhuangzi-rare-{idx:02d}.woff2"
             sz = save_woff2(tmp_base, chunk, os.path.join(SLICES_DIR, fname))
+            fname = hashed_name(os.path.join(SLICES_DIR, fname))
             total_bytes += sz
             urange = format_exact_unicode_range(chunk)
             css_rules.append(
-                f'@font-face{{font-family:"Zhuangzi Rare";src:{local_src},url("/fonts/slices/{fname}") format("woff2");font-weight:400 700;font-style:normal;font-display:swap;unicode-range:{urange}}}'
+                f'@font-face{{font-family:"Zhuangzi Rare";src:{local_src},url("/fonts/slices/{fname}") format("woff2");font-weight:400 700;font-display:swap;unicode-range:{urange}}}'
             )
             print(f"  [rare-{idx:02d}] {len(chunk):3d} chars: {sz/1024:5.1f} KB")
     finally:
         if os.path.exists(tmp_base):
             os.remove(tmp_base)
 
-    css_str = "".join(css_rules)
-    ts_content = (
-        "// 由 python scripts/subset-font.py 自动生成，请勿手改\n"
-        f"export const FONT_FACE_CSS = {json.dumps(css_str, ensure_ascii=False)};\n"
-    )
-    with open(TS_OUT, "w", encoding="utf-8", newline="\n") as f:
-        f.write(ts_content)
+    css_str = "\n".join(css_rules)
+    with open(CSS_OUT, "w", encoding="utf-8", newline="\n") as f:
+        f.write("/* 由 python scripts/subset-font.py 自动生成，请勿手改 */\n" + css_str + "\n")
 
     print(
-        f"完成：总体积 {total_bytes/1024:.1f} KB，内联 CSS {len(css_str)/1024:.1f} KB → {TS_OUT}"
+        f"完成：总体积 {total_bytes/1024:.1f} KB，@font-face CSS {len(css_str)/1024:.1f} KB → {CSS_OUT}"
     )
 
 

@@ -1,16 +1,27 @@
 "use client";
 
-import dynamic from "next/dynamic";
+import { type ComponentType, type ReactNode, useEffect, useState } from "react";
 
-const MapComp = dynamic(() => import("@/components/ZhuangziMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="h-[500px] flex items-center justify-center text-sm text-[var(--text-secondary)]">
-      加载地图中…
-    </div>
-  ),
-});
+/**
+ * Leaflet 只在浏览器里按需加载；就绪前渲染 server 直出的 fallback
+ * （完整地点名录），无 JS / 加载失败时它就是这页的内容。
+ */
+export default function MapWrapper({ fallback }: { fallback: ReactNode }) {
+  const [MapComp, setMapComp] = useState<ComponentType | null>(null);
 
-export default function MapWrapper() {
-  return <MapComp />;
+  useEffect(() => {
+    let cancelled = false;
+    import("@/components/ZhuangziMap")
+      .then((m) => {
+        if (!cancelled) setMapComp(() => m.default);
+      })
+      .catch(() => {
+        /* chunk 取不到（离线等）：保留文字名录 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return MapComp ? <MapComp /> : fallback;
 }

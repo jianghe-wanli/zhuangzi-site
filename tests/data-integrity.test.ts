@@ -8,8 +8,9 @@
  * （例如 kaoju 的键从 "01" 变了，getKaojuByChapter 的 `?? []` 会让全篇注释
  * 无声消失）。这些断言的安全性此前完全没有测试兜底。
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync,readFileSync } from "node:fs";
 import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 const DATA = join(process.cwd(), "src", "data");

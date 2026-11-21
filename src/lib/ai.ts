@@ -18,8 +18,14 @@ export function getApiKey(): string | null {
   }
 }
 
-export function saveApiKey(key: string): void {
-  localStorage.setItem("deepseek_key", key);
+/** 返回是否成功持久化（隐私模式 / 存储已满时为 false，本次会话仍可用） */
+export function saveApiKey(key: string): boolean {
+  try {
+    localStorage.setItem("deepseek_key", key);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export interface ChatOptions {
@@ -152,7 +158,7 @@ export async function chatMultiTurnStream(
     stream: true,
   };
 
-  let res: Response;
+  let res: Response | null = null;
   try {
     res = await fetch(PROXY_URL, {
       method: "POST",
@@ -160,8 +166,14 @@ export async function chatMultiTurnStream(
       body: JSON.stringify(payload),
       ...(opts?.signal ? { signal: opts.signal } : {}),
     });
-  } catch {
-    // Proxy unavailable — try direct DeepSeek
+  } catch (err) {
+    // 用户主动取消：不要再回退发起第二个请求
+    if (opts?.signal?.aborted) throw err;
+  }
+  // 代理不存在（本地 / 纯静态托管对 POST /api/chat 返回 404/405）与网络失败
+  // 同样回退直连 —— 此前只有网络异常才回退，静态托管下流式对话必然报 404，
+  // 而非流式的 chat() / chatMultiTurn() 却能回退，行为不一致。
+  if (!res || res.status === 404 || res.status === 405) {
     res = await fetch(DEEPSEEK_URL, {
       method: "POST",
       headers: {
@@ -180,7 +192,12 @@ export async function chatMultiTurnStream(
   }
 
   if (!res.ok) {
-    throw new Error(`API 请求失败 (${res.status})`);
+    // 代理会返回 { error } 说明原因（限流、密钥无效…），优先展示
+    const detail = await res
+      .json()
+      .then((d: { error?: unknown }) => (typeof d?.error === "string" ? d.error : ""))
+      .catch(() => "");
+    throw new Error(detail || `API 请求失败 (${res.status})`);
   }
 
   // Parse SSE stream
@@ -193,15 +210,14 @@ export async function chatMultiTurnStream(
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
+    buffer += decoder.decode(value, { stream: !done });
     const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+    // 流结束时把最后一行（可能没有换行结尾）也处理掉
+    buffer = done ? "" : lines.pop() || "";
 
     for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      const data = line.slice(6).trim();
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
       if (data === "[DONE]") continue;
 
       try {
@@ -215,6 +231,7 @@ export async function chatMultiTurnStream(
         // Skip unparseable chunks
       }
     }
+    if (done) break;
   }
 
   return fullText || "吾默然。";

@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import DailyPassage, { type DailySnippet } from "@/components/DailyPassage";
+import DailyPassage from "@/components/DailyPassage";
 import ReadingHistoryWidget from "@/components/ReadingHistory";
 import SearchBar from "@/components/SearchBar";
-import { chapters } from "@/data/chapters";
 import { chaptersMeta } from "@/data/chapters/metadata";
 import { concepts } from "@/data/concepts";
 import { STARTER_CHAPTER_IDS } from "@/lib/chapters";
+import { buildDailyPool } from "@/lib/daily";
 import { canonicalUrl } from "@/lib/site";
 
 // 首页自指 canonical。标题/描述/OG 继承根布局即可，
@@ -45,17 +45,7 @@ export default function Home() {
   const totalPassages = chaptersMeta.reduce((a, c) => a + c.passageCount, 0);
   const totalConcepts = concepts.length;
   const featuredChapters = chaptersMeta.filter((ch) => featuredSlugs.includes(ch.id));
-  const dailyPool: DailySnippet[] = chapters.map((ch, idx) => {
-    const pIdx = idx % ch.passages.length;
-    const p = ch.passages[pIdx]!;
-    return {
-      chapterId: ch.id,
-      chapterTitle: ch.title,
-      passageNum: pIdx + 1,
-      original: p.original.length > 120 ? `${p.original.slice(0, 120)}…` : p.original,
-      translation: p.translation.length > 140 ? `${p.translation.slice(0, 140)}…` : p.translation,
-    };
-  });
+  const dailyPool = buildDailyPool();
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -247,9 +237,9 @@ export default function Home() {
                             </span>
                           </div>
                         </div>
-                        <h3 className="text-sm font-semibold text-[var(--text-accent)] tracking-wide group-hover:text-[var(--color-accent-deep)] transition-colors">
+                        <h4 className="text-sm font-semibold text-[var(--text-accent)] tracking-wide group-hover:text-[var(--color-accent-deep)] transition-colors">
                           {ch.title}
-                        </h3>
+                        </h4>
                         <p className="text-xs text-[var(--text-secondary)] line-clamp-2 leading-relaxed">
                           {ch.summary}
                         </p>

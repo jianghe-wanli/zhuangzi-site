@@ -21,13 +21,16 @@ npm run dev          # http://localhost:3000
 | 命令 | 作用 |
 | --- | --- |
 | `npm run dev` | 本地开发服务器 |
-| `npm run build` | 生产构建（导出到 `out/`，并刷新 SW 缓存版本号） |
+| `npm run build` | 生产构建（导出到 `out/`，为每页注入 CSP 脚本 hash，并刷新 SW 缓存版本号） |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | ESLint（覆盖 `src/`、`scripts/`、`functions/`） |
-| `npm test` | 数据完整性 + 主题对比度 + 简繁映射测试 |
-| `npm run verify` | typecheck + lint + test，提交前跑一遍 |
+| `npm run lint` | ESLint（覆盖 `src/`、`tests/`、`scripts/`、`functions/`、`public/sw.js` 与根目录配置；带缓存，警告即失败） |
+| `npm test` | 数据完整性、主题对比度、简繁映射、检索、Service Worker、`/api/chat` 边缘函数、manifest |
+| `npm run verify` | typecheck + lint + 数据 schema 校验 + test，提交前跑一遍 |
 | `npm run budget` | 首屏体积预算检查（需先 build） |
-| `npm run deploy` | 构建并发布到 Cloudflare Pages |
+| `npm run smoke` | 无头 Chrome 冒烟（需先 build）：首页/篇章/概念/搜索/404/离线页无控制台报错与 CSP 违规，客户端路由与 SW 离线回放可用 |
+| `npm run deploy` | 构建 → 产物自检 → 发布到 Cloudflare Pages |
+| `npm start` | 用 `wrangler pages dev` 本地预览 `out/`（含 `_headers` 与 `/api/chat`，最接近线上） |
+| `npm run clean` | 删除 `.next/`、`out/`、`.cache/` |
 
 构建后建议再跑两个产物级校验（CI 已包含）：
 
@@ -44,7 +47,8 @@ node scripts/check-budget.mjs   # 首屏体积
 src/
   app/                  App Router 路由
     layout.tsx          根布局：站点级 metadata、JSON-LD、主题内联脚本
-    <route>/layout.tsx  仅导出 metadata 的 server component
+    <route>/page.tsx    各路由自带 metadata（`buildPageMetadata()`）；交互部分下沉为客户端岛，
+                        不再用「只导出 metadata 的 layout.tsx」
                         （因为对应 page.tsx 是 "use client"，无法自己导出）
     chapters/[id]/      章节正文页（server component，构建期读取考据数据）
     concepts/[id]/      概念详情页
@@ -153,7 +157,8 @@ Next.js 的 metadata 会向下继承。根布局一旦写 `alternates.canonical`
 ## 部署
 
 推送到 `main` 触发 `.github/workflows/ci.yml`：
-typecheck → lint → test → build → 体积预算 → 产物自检 → Lighthouse → 部署。
+`verify`（typecheck / lint / 数据校验 / test）与 `build`（构建 / 体积预算 / 产物自检 /
+章节页回归）并行 → Lighthouse → 部署（三者全过才执行，且仅 `main`）。
 
 需要配置：
 
@@ -170,7 +175,21 @@ typecheck → lint → test → build → 体积预算 → 产物自检 → Ligh
 
 采用 BYOK：访问者自备 DeepSeek API Key，存于其浏览器 `localStorage`，
 经 `functions/api/chat.js` 转发。该函数已加同源校验、限流、输入上限、
-模型白名单、上游错误脱敏与超时保护。
+模型白名单、上游错误脱敏与超时保护（`tests/chat-function.test.ts` 覆盖）。
+
+### 缓存与离线
+
+* **响应头**（`public/_headers`）：`/_next/static/*` 与 `/fonts/slices/*`（文件名带内容哈希）
+  是一年 `immutable`；图片、其余字体用短 `max-age` + `stale-while-revalidate`；
+  JSON 一小时，但页面正文块 `**/blocks.json` 每次校验（须与同次构建的 RSC 载荷配套）。
+  HTML 与 RSC 载荷用 Pages 默认的 `max-age=0, must-revalidate`。
+* **Service Worker**（`public/sw.js`）：哈希资源进不随发版清空的 `zhuangzi-immutable`；
+  页面、RSC 载荷与 `blocks.json` Network-First（慢网 4 秒超时先用缓存）；其余 JSON 用 SWR；
+  其余缓存名里的版本号由构建脚本替换为 build ID，发版即失效。
+  离线且无缓存时显示自包含的 `/offline/`（`public/offline/index.html`），列出本机已缓存可读的页面。
+* **CSP**：`script-src` 由每页 `<meta>` 里的 sha256 清单收紧（`scripts/inject-csp-meta.mjs`
+  构建后现算），新增或修改内联脚本无需改配置；`style-src` 仍需 `'unsafe-inline'`。
+* 改动 `_headers` / `_redirects` 后用 `npm start` 实测响应头；`check-output.mjs` 会校验 Pages 的硬限制。
 
 > 这一架构的固有弱点是**用户密钥途经本站**。若要长期运营，
 > 建议改为服务端自持密钥 + 自建配额，或让浏览器直连 DeepSeek。
@@ -180,19 +199,21 @@ typecheck → lint → test → build → 体积预算 → 产物自检 → Ligh
 
 ## 性能基线
 
-当前实测（gzip，`npm run budget`）：
+当前实测（gzip，`npm run budget`；基线记录在 `scripts/budget.json`）：
 
 | 指标 | 数值 |
 | --- | --- |
-| 共享 JS 基线（每个路由） | ~193 KB |
-| 最重路由 `/chapters/02-qiwu-lun` | ~471 KB（HTML 247 + JS 213 + CSS 11） |
-| `out/` 总体积 | ~41 MB |
+| 共享 JS 基线（每个路由） | 146.5 KB |
+| 最重路由 `/chapters/01-xiaoyao-you` | 222.6 KB（HTML 36.4 + JS 161.6 + CSS 24.6） |
+| 最重概念页 `/concepts/dao` | 220.4 KB（HTML 48.0 + JS 147.8 + CSS 24.6） |
+| `out/` 总体积 | 26.3 MB |
 
-`/chapters/02-qiwu-lun` 的 HTML 里约 43% 是给客户端组件做 hydration 的
-RSC 重复载荷（正文与考据被序列化了两遍）。
-优化方案见 `docs/IMPROVEMENT-ROADMAP.md` 第 1 节。
+JS 只计现代浏览器实际下载的脚本：Next 每页输出的 `<script noModule>` polyfill
+（38.6 KB）不计入。旧口径（计入 polyfill）下共享基线为 197.5 KB。
 
-预算在 `scripts/check-budget.mjs` 的 `BUDGETS` 中，超出即 CI 失败。
+门禁有两层（`scripts/check-budget.mjs`）：`BUDGETS` 绝对上限，以及相对
+`scripts/budget.json` 基线不得增长超过 5%。有意增长时运行
+`node scripts/check-budget.mjs --update` 并在提交信息里说明。
 
 ---
 
@@ -217,14 +238,3 @@ RSC 重复载荷（正文与考据被序列化了两遍）。
 * **无障碍**：暗色按钮对比度、热图主题感知、danger 色 token 全量修复
 
 线上地址：https://zhuangzi-site.pages.dev
-
-## 版本归档规则
-
-主目录 zhuangzi-site 为**工作版**，改版前必须先归档：
-
-`ash
-# 运行归档脚本（自动归档为 zhuangzi-site-vN，版本号递增）
-powershell -File "归档当前版本.ps1"
-`
-
-已归档：zhuangzi-site-v1（历史备份）、zhuangzi-site-v2（原版基线）。

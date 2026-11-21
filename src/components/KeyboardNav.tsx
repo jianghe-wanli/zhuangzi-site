@@ -28,16 +28,8 @@ export default function KeyboardNav({ prevUrl, nextUrl }: KeyboardNavProps) {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // ⌘K / Ctrl+K：聚焦搜索框（首页提示过该快捷键，需全站可用）。
-      // 必须在「无修饰键」检查之前处理——它本身就是修饰键组合。
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        const search = document.querySelector<HTMLInputElement>(
-          'input[type="search"], input[type="text"]'
-        );
-        search?.focus();
-        return;
-      }
+      // ⌘K / Ctrl+K 由 Navigation 全站接管（打开命令台）。此处原先还会去聚焦
+      // 页面上第一个文本框，与命令台抢焦点，已移除。
 
       // 任何修饰键组合都不接管（避免与浏览器/系统/输入法快捷键冲突）
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -80,7 +72,7 @@ export default function KeyboardNav({ prevUrl, nextUrl }: KeyboardNavProps) {
         }
         return;
       }
-      if (e.key === "b") {
+      if (e.key === "b" && !e.repeat) {
         e.preventDefault();
         let targetPassage: HTMLElement | null = null;
         // 优先查找当前鼠标悬停段落
@@ -112,7 +104,7 @@ export default function KeyboardNav({ prevUrl, nextUrl }: KeyboardNavProps) {
         }
         return;
       }
-      if (e.key === "m") {
+      if (e.key === "m" && !e.repeat) {
         const vbtn = document.querySelector<HTMLElement>(
           'button[aria-label*="竖排"], button[aria-label*="横排"], button[title*="竖排"], button[title*="横排"]'
         );

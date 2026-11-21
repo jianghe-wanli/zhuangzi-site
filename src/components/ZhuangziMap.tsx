@@ -61,6 +61,7 @@ export default function ZhuangziMap() {
   const [selectedId, setSelectedId] = useState<string>("meng");
   const [filterState, setFilterState] = useState<string>("全部");
   const [filterPeriod, setFilterPeriod] = useState<string>("全部");
+  const [tilesFailed, setTilesFailed] = useState(false);
 
   const filteredLocations = useMemo(() => {
     return locations.filter((loc) => {
@@ -93,7 +94,11 @@ export default function ZhuangziMap() {
         attribution: "© 高德地图 · 战国古舆水墨设色",
         maxZoom: 18,
       }
-    ).addTo(map);
+    )
+      // 底图取不到（离线 / 被拦截）时提示，标记、行迹线与右侧名录不依赖瓦片
+      .on("tileerror", () => setTilesFailed(true))
+      .on("tileload", () => setTilesFailed(false))
+      .addTo(map);
 
     // 绘制庄子核心游历行迹虚线轨
     L.polyline(TRAVEL_TRACK, {
@@ -237,6 +242,7 @@ export default function ZhuangziMap() {
                   <button
                     key={st}
                     type="button"
+                    aria-pressed={filterState === st}
                     onClick={() => setFilterState(st)}
                     className={`px-2.5 py-1 rounded text-xs font-serif transition-colors cursor-pointer ${
                       filterState === st
@@ -258,6 +264,7 @@ export default function ZhuangziMap() {
                   <button
                     key={pd}
                     type="button"
+                    aria-pressed={filterPeriod === pd}
                     onClick={() => setFilterPeriod(pd)}
                     className={`px-2.5 py-1 rounded text-xs font-serif transition-colors cursor-pointer ${
                       filterPeriod === pd
@@ -290,14 +297,24 @@ export default function ZhuangziMap() {
         <div className="lg:col-span-7 xl:col-span-8 rounded-xl border border-[var(--border-color)] overflow-hidden shadow-sm relative bg-[var(--bg-secondary)]">
           {/* 行迹图示角标 */}
           <div className="absolute top-3 left-3 z-[1000] px-3 py-1.5 rounded-lg bg-[var(--bg-card)]/90 backdrop-blur-sm border border-[var(--border-color)] shadow-sm text-xs font-serif text-[var(--text-primary)] flex items-center gap-2">
-            <span className="inline-block w-4 h-0.5 border-b-2 border-dashed border-[#b83b2e]" />
+            <span className="inline-block w-4 h-0.5 border-b-2 border-dashed border-[#b83b2e]" aria-hidden="true" />
             <span>庄子核心游历行迹（蒙 → 濮水 → 大梁 → 濠水 → 郢都）</span>
           </div>
 
           <div
             ref={mapContainerRef}
+            role="application"
+            aria-label="庄子行迹地图，地点详情见右侧名录"
             className="w-full h-[460px] sm:h-[540px] lg:h-[620px]"
           />
+          {tilesFailed && (
+            <p
+              role="status"
+              className="absolute bottom-3 left-3 z-[1000] px-3 py-1.5 rounded-lg bg-[var(--bg-card)]/90 border border-[var(--border-color)] text-[11px] font-serif text-[var(--text-secondary)]"
+            >
+              底图加载失败，地标与名录仍可浏览
+            </p>
+          )}
         </div>
 
         {/* 右侧：风物考据卡与地标名录 */}
@@ -377,6 +394,7 @@ export default function ZhuangziMap() {
                   <button
                     key={loc.id}
                     type="button"
+                    aria-pressed={isActive}
                     onClick={() => handleSelectLocation(loc)}
                     className={`w-full text-left p-2.5 rounded-lg border text-xs font-serif transition-all flex items-center justify-between cursor-pointer ${
                       isActive

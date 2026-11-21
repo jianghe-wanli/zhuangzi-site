@@ -3,6 +3,8 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 
+import { subscribePassageClass } from "@/lib/passage-dom";
+
 const PinyinAnnotator = dynamic(() => import("./PinyinAnnotator"), {
   ssr: false,
   loading: () => null,
@@ -39,13 +41,11 @@ export default function PinyinSlot() {
       setOn(next);
     };
     update();
-    const mo = new MutationObserver(update);
-    mo.observe(root, { attributes: true, attributeFilter: ["class"] });
-    return () => mo.disconnect();
+    return subscribePassageClass(root, update);
   }, []);
 
   return (
-    <div ref={ref} className="pinyin-original" hidden={!on}>
+    <div ref={ref} className="pinyin-original reading-prose tracking-wide text-lg sm:text-xl" hidden={!on}>
       {on && <PinyinAnnotator text={text} enabled={true} />}
     </div>
   );

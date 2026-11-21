@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./font-faces.css";
 
 /* ============================================
    莊子數位典藏 · Design System v2.0
@@ -8,12 +9,6 @@
 
 @theme inline {
   /* ── Color Palette（设计规范 v1.0 微调 + 竹青） ── */
-  --color-paper: #FAF8F4;          /* 暖宣纸 — 页面主背景 */
-  --color-paper-warm: #F3ECE1;     /* 暖茶纸 — 次级背景、卡片背景 */
-  --color-paper-cream: #FDFBF7;    /* 奶油纸 — 卡片浮层 */
-  --color-ink: #231C14;            /* 松烟墨 — 主文字 */
-  --color-ink-warm: #362B1F;       /* 暖墨 — 深色文字 */
-  --color-ink-soft: #665747;       /* 淡墨 — 副文字 */
   /* 浅墨 — 辅助文字。#A89880 仅 2.67:1，不达 WCAG AA；规范 #827463 仍只 4.28:1，
      加深至 #7E7062（4.52:1）达标。 ⚠️ 真正生效的值来自 src/lib/theme.ts。 */
   --color-ink-muted: #7E7062;
@@ -21,23 +16,9 @@
   --color-accent-deep: #703D20;    /* 深檀 — 悬停/激活 */
   --color-accent-gold: #BFA05E;    /* 金箔 — 装饰性强调 */
   --color-accent-vermilion: #C24438; /* 朱砂 — 重要标记 */
-  --color-danger: #C24438;           /* 危险/错误语义（主题感知值由 theme.ts 行内脚本覆盖） */
+  --color-danger: #C24438;           /* 危险/错误语义（主题感知值见下方调色板区块） */
   --color-accent-bamboo: #416353;  /* 远山竹青 — 概念标签/指示线（静态兜底，
-                                    主题感知值由 theme.ts 行内脚本覆盖） */
-  --color-border: #E8DFCF;         /* 绢边 — 边框 */
-  --color-border-light: #F2ECE1;   /* 轻绢 — 浅边框 */
-  --color-border-strong: #D5C7B0;  /* 浓绢 — 深边框 */
-
-  /* Dark mode（夜读主题同步微调） */
-  --color-dm-bg: #161412;          /* 暗夜宣纸 */
-  --color-dm-bg-elevated: #1F1B16; /* 暗夜浮层 */
-  --color-dm-bg-card: #24201A;     /* 暗夜卡片 */
-  --color-dm-text: #EAE4D9;        /* 暗夜文字 */
-  --color-dm-text-soft: #A69D8E;   /* 暗夜副文 */
-  --color-dm-accent: #D49B6A;      /* 暗夜檀木 */
-  --color-dm-accent-gold: #DEBE7C; /* 暗夜金箔 */
-  --color-dm-bamboo: #689781;      /* 暗夜竹青（v1.0 新增） */
-  --color-dm-border: #38322A;      /* 暗夜边框 */
+                                    主题感知值见下方调色板区块） */
 
   /* ── Typography ──
      自托管按需分片古籍宋体（TODO 3.1）：public/fonts/slices/*.woff2 由
@@ -47,13 +28,7 @@
   --font-serif: "LXGW WenKai", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", "PingFang SC", "Microsoft YaHei", "WenQuanYi Micro Hei", "Droid Sans Fallback", "Zhuangzi Rare", serif;
   --font-classical: "Zhuangzi Serif", "LXGW WenKai", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", "WenQuanYi Micro Hei", serif;
   --font-sans: "Inter", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
-
-  /* ── Spacing Scale (8px base) ── */
-  --spacing-section: 7.5rem;       /* 120px — 大区段间距 */
-  --spacing-block: 4rem;           /* 64px — 区块间距 */
-  --spacing-component: 2rem;       /* 32px — 组件间距 */
-  --spacing-element: 1rem;         /* 16px — 元素间距 */
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
 
   /* ── Animation ── */
   --ease-spring: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -64,54 +39,145 @@
 }
 
 /* ============================================
-   CSS Variables — Light Mode (default)
-   ============================================ */
-:root {
-  --bg-primary: var(--color-paper);
-  --bg-secondary: var(--color-paper-warm);
-  --bg-card: #FFFFFF;
-  --bg-card-hover: var(--color-paper-cream);
-  --text-primary: var(--color-ink);
-  --text-secondary: var(--color-ink-soft);
-  --text-muted: var(--color-ink-muted);
-  --text-accent: var(--color-accent);
-  --border-color: var(--color-border);
-  --border-light: var(--color-border-light);
-  --border-strong: var(--color-border-strong);
-  --hover-bg: rgba(139, 94, 60, 0.06);
-  --hover-bg-strong: rgba(139, 94, 60, 0.10);
-  --selection-bg: rgba(139, 94, 60, 0.15);
-  --shadow-sm: 0 1px 3px rgba(42, 34, 24, 0.04);
-  --shadow-md: 0 4px 16px rgba(42, 34, 24, 0.06);
-  --shadow-lg: 0 8px 32px rgba(42, 34, 24, 0.08);
-  --shadow-xl: 0 16px 48px rgba(42, 34, 24, 0.10);
-}
+   主题调色板（五套）
 
-/* ============================================
-   Font Variables (system stack — no network fetch)
+   下面两个标记之间的区块是 src/lib/theme.ts 中 buildThemeCss() 的逐字输出，
+   请勿手改：改色请改 theme.ts，再把测试给出的新区块粘贴回来
+   （tests/theme-contrast.test.ts 锁定二者一致）。
+   <head> 内联脚本与 ThemeProvider 只切换 <html data-theme>。
    ============================================ */
+/* @theme-palette:start */
 :root {
-  --font-serif: "LXGW WenKai", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", "PingFang SC", "Microsoft YaHei", "WenQuanYi Micro Hei", "Droid Sans Fallback", "Zhuangzi Rare", serif;
-  --font-classical: "Zhuangzi Serif", "LXGW WenKai", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", "WenQuanYi Micro Hei", serif;
-  --font-sans: "Inter", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
+  --bg-primary: #FAF8F4;
+  --bg-secondary: #F3ECE1;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #FDFBF7;
+  --text-primary: #231C14;
+  --text-secondary: #665747;
+  --text-muted: #7E7062;
+  --text-accent: #8E5431;
+  --color-accent-deep: #703D20;
+  --color-accent-gold: #BFA05E;
+  --color-accent-bamboo: #416353;
+  --color-danger: #C24438;
+  --color-accent-vermilion: #B83B2E;
+  --btn-accent-text: #FFFFFF;
+  --border-color: #E8DFCF;
+  --border-light: #F2ECE1;
+  --border-strong: #D5C7B0;
+  --hover-bg: rgba(142, 84, 49, 0.06);
+  --hover-bg-strong: rgba(142, 84, 49, 0.10);
+  --selection-bg: rgba(142, 84, 49, 0.15);
+  --shadow-rgb: 35, 28, 20;
+}
+:root[data-theme="zhujian"] {
+  --bg-primary: #F3F0E4;
+  --bg-secondary: #E8E3D2;
+  --bg-card: #FAF7EC;
+  --bg-card-hover: #F2EEDD;
+  --text-primary: #3A3520;
+  --text-secondary: #6B6340;
+  --text-muted: #766D49;
+  --text-accent: #5A6B3A;
+  --color-accent-deep: #3F4C26;
+  --color-accent-gold: #A08B4A;
+  --color-accent-bamboo: #47705A;
+  --color-danger: #A4452E;
+  --color-accent-vermilion: #AD362B;
+  --btn-accent-text: #FFFFFF;
+  --border-color: #D8D0B0;
+  --border-light: #E8E2C8;
+  --border-strong: #C4B994;
+  --hover-bg: rgba(90, 107, 58, 0.07);
+  --hover-bg-strong: rgba(90, 107, 58, 0.12);
+  --selection-bg: rgba(90, 107, 58, 0.16);
+  --shadow-rgb: 58, 53, 32;
+}
+:root[data-theme="moyun"] {
+  --bg-primary: #F5F5F5;
+  --bg-secondary: #EEEEEE;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F7F7F7;
+  --text-primary: #1A1A1A;
+  --text-secondary: #5C5C5C;
+  --text-muted: #707070;
+  --text-accent: #333333;
+  --color-accent-deep: #111111;
+  --color-accent-gold: #8A8A8A;
+  --color-accent-bamboo: #55655C;
+  --color-danger: #C0392B;
+  --color-accent-vermilion: #B0382C;
+  --btn-accent-text: #FFFFFF;
+  --border-color: #D5D5D5;
+  --border-light: #E5E5E5;
+  --border-strong: #BDBDBD;
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --hover-bg-strong: rgba(0, 0, 0, 0.08);
+  --selection-bg: rgba(0, 0, 0, 0.12);
+  --shadow-rgb: 0, 0, 0;
+}
+:root[data-theme="qinghua"] {
+  --bg-primary: #F7F9FB;
+  --bg-secondary: #EDF2F7;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F4F8FC;
+  --text-primary: #1A2A3A;
+  --text-secondary: #4A6278;
+  --text-muted: #647483;
+  --text-accent: #2B5F8A;
+  --color-accent-deep: #1B4263;
+  --color-accent-gold: #7A93A8;
+  --color-accent-bamboo: #2F7A6D;
+  --color-danger: #C24438;
+  --color-accent-vermilion: #B0382C;
+  --btn-accent-text: #FFFFFF;
+  --border-color: #D0DDE8;
+  --border-light: #E0EAF3;
+  --border-strong: #B4C7D8;
+  --hover-bg: rgba(43, 95, 138, 0.06);
+  --hover-bg-strong: rgba(43, 95, 138, 0.11);
+  --selection-bg: rgba(43, 95, 138, 0.15);
+  --shadow-rgb: 26, 42, 58;
+}
+:root[data-theme="yedu"] {
+  --bg-primary: #161412;
+  --bg-secondary: #1F1B16;
+  --bg-card: #24201A;
+  --bg-card-hover: #2A2620;
+  --text-primary: #EAE4D9;
+  --text-secondary: #A69D8E;
+  --text-muted: #9A9081;
+  --text-accent: #D49B6A;
+  --color-accent-deep: #EFC08A;
+  --color-accent-gold: #DEBE7C;
+  --color-accent-bamboo: #689781;
+  --color-danger: #E06050;
+  --color-accent-vermilion: #E56B5B;
+  --btn-accent-text: #161412;
+  --border-color: #38322A;
+  --border-light: #2C2822;
+  --border-strong: #443E36;
+  --hover-bg: rgba(212, 155, 106, 0.08);
+  --hover-bg-strong: rgba(212, 155, 106, 0.14);
+  --selection-bg: rgba(212, 155, 106, 0.22);
+  --shadow-rgb: 0, 0, 0;
+}
+/* @theme-palette:end */
+
+:root {
+  --shadow-md: 0 4px 16px rgba(42, 34, 24, 0.06);
 }
 
 /* ============================================
    Dark Mode (.dark)
 
-   配色本身**不再**写在这里。所有可换肤颜色由 src/lib/theme.ts 定义，
-   并通过 <head> 内联脚本 + ThemeProvider 以行内样式写到 :root —
-   行内样式优先级高于本文件，重复声明只会造成两份互相漂移的真值
-   （历史上正是这样让一处 WCAG 修复被静默覆盖）。
-   `.dark` 类仍由 ThemeProvider 挂载，供下面这类**结构性**深色规则使用。
+   配色不写在这里：所有可换肤颜色由 src/lib/theme.ts 定义，生成上面的
+   调色板区块（唯一一份，测试锁定）。
+   `.dark` 类由内联脚本 / ThemeProvider 挂载，供下面这类**结构性**深色规则使用。
    ============================================ */
 .dark {
   /* 阴影在深色背景上需要更强的黑度才可见 */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.38);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
-  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.55);
 }
 
 /* 深色下减淡装饰性渐变，避免发灰 */
@@ -140,7 +206,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, .section-heading, .original-text, .seal-char, .seal-char-lg, .vertical-extract, .vertical-prose, .jiazhu-note, .font-classical {
+h1, h2, .section-heading, .original-text, .seal-char, .seal-char-lg, .vertical-extract {
   font-family: var(--font-classical);
 }
 
@@ -251,74 +317,6 @@ html {
   background: var(--bg-card-hover);
   transform: translateY(-4px);
 }
-
-/* ============================================
-   Button Styles（设计升级规范五.3）
-   全站此前无统一按钮类，散落各页用 Tailwind arbitrary 拼装，
-   hover 态不一致。补 .btn-primary / .btn-secondary 语义类：
-   - primary：檀木实底，hover 加深 + 微光外发散
-   - secondary：细绢边，hover 墨染淡渗
-   字号/圆角/内边距给默认值，调用方可按需覆盖。
-   ============================================ */
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1.25rem;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  letter-spacing: 0.03em;
-  color: #FFFFFF;
-  background: var(--text-accent);
-  border: 1px solid var(--text-accent);
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-out-expo),
-              box-shadow var(--duration-fast) var(--ease-out-expo),
-              transform var(--duration-fast) var(--ease-out-expo);
-}
-.btn-primary:hover {
-  background: var(--color-accent-deep);
-  border-color: var(--color-accent-deep);
-  /* 微光外发散：主题感知的檀木光晕 */
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-accent) 18%, transparent),
-              0 6px 16px rgba(var(--shadow-rgb), 0.18);
-}
-.btn-primary:active {
-  transform: translateY(1px);
-}
-
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1.25rem;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  letter-spacing: 0.03em;
-  color: var(--text-primary);
-  background: transparent;
-  border: 1px solid var(--border-color);
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-out-expo),
-              border-color var(--duration-fast) var(--ease-out-expo),
-              color var(--duration-fast) var(--ease-out-expo);
-}
-.btn-secondary:hover {
-  /* 墨染淡渗：暖底 + 边框转檀木 */
-  background: var(--hover-bg);
-  border-color: color-mix(in srgb, var(--text-accent) 40%, transparent);
-  color: var(--text-accent);
-}
-.btn-secondary:active {
-  background: var(--hover-bg-strong);
-}
-
-/* 触屏最小尺寸继承全局 44px 规则（见 @media max-width:640px），
-   此处不重复，保持单一真值。 */
 
 /* ============================================
    导航下拉菜单项（设计升级规范五.1）
@@ -454,18 +452,24 @@ html {
 }
 
 /* ============================================
-   导航加载骨架（src/app/loading.tsx）
-   基色始终可见；脉冲只在 1 ↔ 0.55 间呼吸，
-   prefers-reduced-motion 下被上方全局规则冻结在基色，不会消失。
+   客户端路由进度条（html[data-navigating]，见 src/lib/route-progress.ts）
+   延迟 120ms 才出现：载荷已缓存的瞬时切换不闪一下。
    ============================================ */
-.skeleton {
-  background-color: var(--border-light);
-  animation: skeleton-pulse 1.8s var(--ease-spring) infinite;
+html[data-navigating]::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 70;
+  height: 2px;
+  background: var(--text-accent);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  animation: route-progress 6s cubic-bezier(0.1, 0.8, 0.2, 1) 0.12s forwards;
+  pointer-events: none;
 }
 
-@keyframes skeleton-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+@keyframes route-progress {
+  to { transform: scaleX(0.92); }
 }
 
 /* ============================================
@@ -587,25 +591,10 @@ html.vertical-mode .cv-auto {
 
 /* ============================================
    Animation Utilities
-   注：fadeInUp 保持首帧可见（opacity: 1），仅做轻柔丝卷上浮位移，
-   避免 opacity: 0 在弱网/降频下推迟浏览器 LCP（最大内容绘制）计时。
    ============================================ */
-@keyframes fadeInUp {
-  from {
-    transform: translateY(10px);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-.animate-fade-in-up {
-  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) both;
 }
 
 .animate-fade-in {
@@ -625,29 +614,13 @@ html.vertical-mode .cv-auto {
   }
 }
 
-/* Staggered children */
-.stagger-children > * {
-  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) both;
-}
-
-.stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
-.stagger-children > *:nth-child(2) { animation-delay: 0.10s; }
-.stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
-.stagger-children > *:nth-child(4) { animation-delay: 0.20s; }
-.stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
-.stagger-children > *:nth-child(6) { animation-delay: 0.30s; }
-.stagger-children > *:nth-child(7) { animation-delay: 0.35s; }
-.stagger-children > *:nth-child(8) { animation-delay: 0.40s; }
-.stagger-children > *:nth-child(9) { animation-delay: 0.45s; }
-
 /* ============================================
    Reduced Motion (WCAG 2.3.3 / prefers-reduced-motion)
 
-   本站首页用 .stagger-children 做入场动画、卡片有 translateY 位移、
-   html 开了 scroll-behavior: smooth。对前庭功能障碍用户，这些都可能
-   引发不适；此前没有任何降级处理。
+   卡片有 translateY 位移、html 开了 scroll-behavior: smooth，对前庭功能
+   障碍用户可能引发不适。
    关键点：入场动画必须**保留终态可见**（opacity:1），
-   直接 animation:none 会让 .stagger-children 的子元素永久停在 opacity:0。
+   直接 animation:none 会让元素永久停在 opacity:0。
    ============================================ */
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -664,8 +637,6 @@ html.vertical-mode .cv-auto {
   }
 
   /* 保证动画元素停在可见终态，而不是初始的 opacity:0 */
-  .stagger-children > *,
-  .animate-fade-in-up,
   .animate-fade-in {
     opacity: 1 !important;
     transform: none !important;
@@ -723,8 +694,7 @@ html.vertical-mode .cv-auto {
   margin-left: 2rem;
 }
 
-.vertical-mode .vertical-content .card,
-.vertical-mode .vertical-content .passage-card {
+.vertical-mode .vertical-content .card {
   max-height: 100%;
   overflow: visible;
   background: transparent;
@@ -873,11 +843,6 @@ html.vertical-mode .cv-auto {
     min-height: 0;
   }
 
-  /* Reading progress thinner */
-  .reading-progress-bar {
-    height: 1px;
-  }
-
   /* 移动端右下角悬浮按钮收巧与避让（ISSUE-V02） */
   .chat-fab,
   .back-to-top {
@@ -969,7 +934,6 @@ html.vertical-mode .cv-auto {
 }
 
 /* 主按钮文本色对齐 --btn-accent-text（夜读高对比度保障） */
-.btn-accent,
 button.bg-\[var\(--text-accent\)\],
 .chat-fab button {
   color: var(--btn-accent-text, #ffffff) !important;
@@ -1070,6 +1034,10 @@ button.bg-\[var\(--text-accent\)\],
 }
 .pinyin-on .pinyin-original {
   display: block;
+  /* 与 .original-text 同字号同色；行高加大给注音留位
+     （此前这里没有任何排版类，注音版继承正文默认字号，行间互相重叠） */
+  line-height: 2.6;
+  color: var(--text-primary);
 }
 
 /* 批注面板：默认隐藏；annotation-on 时显示 */
@@ -1158,34 +1126,6 @@ html.immersive-mode .passage-toolbar {
 
 .dark .leaflet-tile-pane {
   filter: sepia(0.3) saturate(0.45) contrast(0.9) brightness(0.72);
-}
-
-/* 印章圆点：外圈主题赭石 + 内芯金箔，白描边从底色中提起 */
-.zz-pin-wrap {
-  background: transparent;
-  border: none;
-}
-
-.zz-pin {
-  display: block;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 50% 50%,
-    var(--color-accent-gold) 0 3px,
-    var(--text-accent) 3.5px 100%
-  );
-  border: 2px solid var(--bg-card);
-  box-shadow:
-    0 0 0 1.5px color-mix(in srgb, var(--text-accent) 55%, transparent),
-    0 2px 6px rgba(0, 0, 0, 0.28);
-  transition: transform var(--duration-fast) var(--ease-out-expo);
-}
-
-.zz-pin-wrap:hover .zz-pin,
-.zz-pin-wrap:focus-visible .zz-pin {
-  transform: scale(1.25);
 }
 
 /* 弹层主题化（默认白底蓝字出戏） */

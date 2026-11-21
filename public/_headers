@@ -10,29 +10,40 @@
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   X-DNS-Prefetch-Control: off
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
-  # 注：不设 Cross-Origin-Embedder-Policy: require-corp —— 它会拦掉
-  # 高德地图瓦片（不带 CORP 头）。Leaflet 标记图标已自托管
-  # （public/vendor/leaflet/，见 TODO 3.9），只剩高德瓦片这一项障碍。
-  # 若将来瓦片也自托管，可再开启 COEP 以获得跨源隔离。
+  # Cross-Origin-Embedder-Policy: credentialless（不是 require-corp）
+  #   require-corp 会拦掉不带 CORP 头的高德地图瓦片（Chrome 实测：图片被拦）。
+  #   credentialless 下，跨源 no-cors 子资源改为不带凭据请求、无需对方配合
+  #   （Chrome 实测：瓦片正常加载，且 crossOriginIsolated === true）。
+  #   与上面的 COOP: same-origin 配合得到跨源隔离（进程级防 Spectre 类读取）。
+  #   Safari 不认识 credentialless 会整条忽略，行为与此前相同。
+  Cross-Origin-Embedder-Policy: credentialless
+  # 让浏览器按「源」而不是按「站点」划分进程/agent cluster（pages.dev 下的其他子域与本站不同源）
+  Origin-Agent-Cluster: ?1
   #
   # Content-Security-Policy
-  # 'unsafe-inline' 仍为 script-src 所需，原因：
-  #   1. layout.tsx 的防闪烁主题脚本必须同步内联执行（否则首帧闪色）
-  #   2. 各页 JSON-LD 结构化数据必须内联（ld+json 不支持外链 src）
-  # 由于 _headers 是**静态**文件、无法按请求下发 nonce，而 JSON-LD 内容
-  # 每页不同导致 hash 无法穷举，故暂时保留 'unsafe-inline'。
-  # 缓解措施：全站进入 dangerouslySetInnerHTML 的内容统一走
-  # src/lib/markup.ts 的 renderEmphasis()（先转义再只还原 **粗体**）。
-  # 收紧路径见 docs/IMPROVEMENT-ROADMAP.md 第三节。
+  # script-src 的实际约束来自**两条策略的交集**：
+  #   - 这里（响应头）：'self' 'unsafe-inline' —— 静态 _headers 无法按页列 hash
+  #   - 每个 HTML 里的 <meta http-equiv="Content-Security-Policy">：
+  #     script-src 'self' + 该页全部内联脚本的 sha256
+  #     （scripts/inject-csp-meta.mjs 构建后现算；check-output 与 smoke 守护）
+  # 浏览器要求脚本同时满足两条，所以真正能执行的内联脚本只有构建时就在页面里的那几个；
+  # 注入的 <script> 会被 meta 那条拦下。这里的 'unsafe-inline' 不能删：
+  # 删了之后带 hash 的合法内联脚本也过不了响应头这一条。
+  # JSON-LD 是 application/ld+json 数据块，不执行，不受 script-src 约束。
   #
+  # style-src 仍需 'unsafe-inline'：产物里平均每页 15 处 style="…" 属性（React 行内样式），
+  #   hash 不适用于属性（'unsafe-hashes' 也要逐值穷举），且 styled-jsx / Leaflet 运行时会插入 <style>。
+  # 不设 Reporting-Endpoints / report-to：本站没有可接收并留存违规报告的后端。
+  #
+  # script-src-attr 'none'：禁止 onclick= / onerror= 这类内联事件属性（React 不使用它们）。
   # img-src:     高德瓦片(webrd0{1-4}.is.autonavi.com)；地图标记图标已自托管
   # connect-src: api.deepseek.com (BYOK AI) + 高德瓦片
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org https://webrd01.is.autonavi.com https://webrd02.is.autonavi.com https://webrd03.is.autonavi.com https://webrd04.is.autonavi.com; connect-src 'self' https://api.deepseek.com https://tile.openstreetmap.org https://webrd01.is.autonavi.com https://webrd02.is.autonavi.com https://webrd03.is.autonavi.com https://webrd04.is.autonavi.com; font-src 'self'; media-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://webrd01.is.autonavi.com https://webrd02.is.autonavi.com https://webrd03.is.autonavi.com https://webrd04.is.autonavi.com; connect-src 'self' https://api.deepseek.com https://webrd01.is.autonavi.com https://webrd02.is.autonavi.com https://webrd03.is.autonavi.com https://webrd04.is.autonavi.com; font-src 'self'; media-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests
 
 # ──────────────────────────────────────────
 # 内容哈希命名的静态资源 — 永久不可变
@@ -41,20 +52,48 @@
   Cache-Control: public, max-age=31536000, immutable
 
 # ──────────────────────────────────────────
-# 图片与静态资产
+# 图片、字体、数据：文件名**不带内容哈希**，不能标 immutable。
+# 此前 /*.png 与 /*.woff2 都是「一年 + immutable」：OG 图、图标、字体分片
+# 一旦重新生成，老访客最长一年拿不到新文件（字体重新子集化后会缺字回退）。
+# 现改为短 max-age + stale-while-revalidate：过期后先用旧副本、后台校验（304）。
+# 回访速度另由 Service Worker 的 Cache-First 保证（随构建版本失效）。
 # ──────────────────────────────────────────
 /*.png
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 
 /*.svg
-  Cache-Control: public, max-age=604800, must-revalidate
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 
-# 自托管子集字体（内容哈希固定，见 TODO 3.1）
 /*.woff2
+  Cache-Control: public, max-age=604800, stale-while-revalidate=31536000
+
+# 字体分片文件名带内容哈希（zhuangzi-cls-NN.<hash>.woff2）→ 可以一年 immutable。
+# 先摘掉上面 /*.woff2 给的值，否则两条 Cache-Control 会被拼成一条。
+/fonts/slices/*
+  ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
+# JSON 数据文件名不带哈希。max-age=3600 的含义是「发版后最长一小时内，浏览器
+# 不问服务器直接用旧文件」：对 /data/**、搜索索引、每日译文可以接受
+# （内容只随发版变化，且各自有回退路径），换来一小时内零请求。
 /*.json
   Cache-Control: public, max-age=3600, must-revalidate
+
+# 页面正文静态块必须与同一次构建的 RSC 载荷配套，不能有「一小时旧窗口」：
+# 每次都向服务器校验（未变时是 304，无正文）。与 HTML / RSC 载荷的默认策略一致。
+/*/blocks.json
+  ! Cache-Control
+  Cache-Control: public, max-age=0, must-revalidate
+
+# OG 分享图会被第三方页面以 <img> 直接引用，放开 CORP（其余资源保持 same-origin）。
+# 先用 ! 摘掉 /* 区块继承的值，否则同名头会被逗号拼接成非法值。
+/og/*
+  ! Cross-Origin-Resource-Policy
+  Cross-Origin-Resource-Policy: cross-origin
+
+/og-image.png
+  ! Cross-Origin-Resource-Policy
+  Cross-Origin-Resource-Policy: cross-origin
 
 # ──────────────────────────────────────────
 # Service Worker 必须不被长缓存，否则新版本无法及时接管
@@ -62,16 +101,9 @@
 /sw.js
   Cache-Control: public, max-age=0, must-revalidate
 
-# ──────────────────────────────────────────
-# HTML — 短 TTL + stale-while-revalidate
-# Cloudflare CDN 在回源校验期间继续提供旧副本
-# ──────────────────────────────────────────
-/*.html
-  Cache-Control: public, max-age=0, must-revalidate, stale-while-revalidate=3600
-
-# ──────────────────────────────────────────
-# AI 代理绝不缓存
-# ──────────────────────────────────────────
-/api/*
-  Cache-Control: no-store
-  X-Robots-Tag: noindex
+# 说明：
+# - HTML 与 RSC 载荷（*.txt）不需要规则：Pages 默认即
+#   `public, max-age=0, must-revalidate`。此前的 `/*.html` 规则匹配不到任何页面
+#   （页面地址是 /chapters/x/，不以 .html 结尾），已删除。
+# - /api/* 由 Pages Function 响应，_headers 对 Functions 不生效，
+#   相应的 no-store / nosniff / noindex 在 functions/api/chat.js 里设置。

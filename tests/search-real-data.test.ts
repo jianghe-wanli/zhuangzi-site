@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 
 import { chapters } from "@/data/chapters";
-import { matchItems, buildGrams, type SearchItem } from "@/lib/search";
+import { buildGrams, matchItems, type SearchItem } from "@/lib/search";
 
 /** 与 ensureIndex 完全一致的索引构建（searchText 仅原文） */
 function buildRealIndex(): SearchItem[] {
