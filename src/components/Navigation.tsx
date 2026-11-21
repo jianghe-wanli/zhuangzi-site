@@ -162,18 +162,22 @@ function NavigationContent() {
     setActiveDropdown(null);
   }, [pathname]);
 
-  // Close mobile menu on resize to desktop
+  // 跨到桌面断点时收起移动菜单。用 matchMedia 的 change 事件而非 resize：
+  // 旧实现监听 resize 且阈值写成 640（实际断点是 md=768），640–767px 宽的
+  // 设备上地址栏伸缩触发的 resize 会把刚打开的菜单关掉。
   useEffect(() => {
-    const handler = () => {
-      if (window.innerWidth >= 640) setMenuOpen(false);
+    const mq = window.matchMedia("(min-width: 768px)");
+    const handler = (e: MediaQueryListEvent) => {
+      if (e.matches) setMenuOpen(false);
     };
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
   }, []);
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
-    return pathname.startsWith(href);
+    // 按路径段匹配：/reading-path 不应点亮 /reading-path-xxx 之类的前缀近似项
+    return pathname === href || pathname.startsWith(`${href}/`);
   };
 
   /** 菜单内方向键导航（WCAG 2.1.2：aria-haspopup 需配套 role=menu 与键盘操作） */
@@ -183,7 +187,12 @@ function NavigationContent() {
     );
     if (items.length === 0) return;
     const idx = items.indexOf(document.activeElement as HTMLElement);
-    if (e.key === "ArrowDown") {
+    if (e.key === "Escape") {
+      // 关闭后把焦点还给触发按钮，否则焦点随菜单卸载而丢到 <body>
+      e.stopPropagation();
+      setActiveDropdown(null);
+      ((e.currentTarget as HTMLElement).previousElementSibling as HTMLElement | null)?.focus();
+    } else if (e.key === "ArrowDown") {
       e.preventDefault();
       items[(idx + 1) % items.length]?.focus();
     } else if (e.key === "ArrowUp") {
@@ -203,8 +212,9 @@ function NavigationContent() {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
     setActiveDropdown(group.label);
+    // React 事件对象的 currentTarget 在回调返回后即被清空，须先取出
+    const btn = e.currentTarget as HTMLElement;
     requestAnimationFrame(() => {
-      const btn = e.currentTarget as HTMLElement;
       const items = btn.nextElementSibling?.querySelectorAll<HTMLElement>('a[role="menuitem"]') ?? [];
       if (e.key === "ArrowUp") items[items.length - 1]?.focus();
       else items[0]?.focus();
@@ -217,7 +227,7 @@ function NavigationContent() {
         scrolled ? "shadow-[0_4px_20px_rgba(35,28,20,0.03)]" : "shadow-none"
       }`}
     >
-      <nav className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+      <nav aria-label="主导航" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
         {/* Logo */}
         <Link
           href="/"
@@ -227,6 +237,7 @@ function NavigationContent() {
           莊子
         </Link>
 
+        <div className="flex items-center">
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center" ref={dropdownRef}>
           {/* Primary links */}
@@ -236,6 +247,7 @@ function NavigationContent() {
                 key={link.href}
                 href={link.href}
                 prefetch={false}
+                aria-current={isActive(link.href) ? "page" : undefined}
                 className={`relative px-3 py-1.5 text-sm tracking-wide rounded-lg transition-all ${
                   isActive(link.href)
                     ? "text-[var(--text-accent)] font-medium bg-[var(--hover-bg)]"
@@ -252,8 +264,18 @@ function NavigationContent() {
 
           {/* Dropdown groups */}
           {navGroups.map((group) => (
-            <div key={group.label} className="relative">
+            <div
+              key={group.label}
+              className="relative"
+              // Tab 离开整个下拉（触发按钮 + 菜单）时收起，避免菜单悬在失焦状态
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  setActiveDropdown((cur) => (cur === group.label ? null : cur));
+                }
+              }}
+            >
               <button
+                type="button"
                 onClick={() =>
                   setActiveDropdown(activeDropdown === group.label ? null : group.label)
                 }
@@ -275,6 +297,7 @@ function NavigationContent() {
                   viewBox="0 0 24 24"
                   stroke="currentColor"
                   strokeWidth={2}
+                  aria-hidden="true"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                 </svg>
@@ -293,6 +316,7 @@ function NavigationContent() {
                       href={item.href}
                       prefetch={false}
                       role="menuitem"
+                      aria-current={isActive(item.href) ? "page" : undefined}
                       className={`nav-menu-item block relative px-4 py-2 text-sm transition-colors ${
                         isActive(item.href)
                           ? "text-[var(--text-accent)] bg-[var(--hover-bg)] font-medium"
@@ -307,19 +331,23 @@ function NavigationContent() {
             </div>
           ))}
 
-          {/* Tools */}
-          <div className="flex items-center gap-1 ml-3 pl-2 border-l border-[var(--border-light)]">
+        </div>
+
+          {/* 工具区：桌面与移动共用同一组实例。
+              此前桌面 / 移动容器各渲染一份（CSS 隐藏其一）：每个路由多水合 4 个
+              client 组件、多一倍 DOM 与监听，且两份阅读设置的面板状态互不同步 */}
+          <div className="flex items-center gap-1 md:ml-3 md:pl-2 md:border-l md:border-[var(--border-light)]">
             <button
               type="button"
               onClick={openCommandPalette}
-              className="min-h-[32px] px-2 py-1 rounded border border-[var(--border-color)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--text-accent)]/40 hover:bg-[var(--hover-bg)] transition-all flex items-center gap-1.5"
+              className="w-8 h-8 md:w-auto md:h-auto md:min-h-[32px] md:px-2 md:py-1 rounded border border-[var(--border-color)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--text-accent)]/40 hover:bg-[var(--hover-bg)] transition-all flex items-center justify-center gap-1.5"
               aria-label="打开万能命令台 (⌘K)"
               title="命令台 (⌘K)"
             >
-              <svg className="w-3.5 h-3.5 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden="true">
+              <svg className="w-3.5 h-3.5 md:text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
-              <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-muted)]">
+              <kbd className="hidden md:inline text-[10px] font-mono px-1 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-muted)]">
                 ⌘K
               </kbd>
             </button>
@@ -328,28 +356,11 @@ function NavigationContent() {
             <ThemeSwitcher />
             <VerticalModeToggle />
           </div>
-        </div>
 
-        {/* Mobile: tools + hamburger */}
-        <div className="flex md:hidden items-center gap-1">
           <button
             type="button"
-            onClick={openCommandPalette}
-            className="w-8 h-8 flex items-center justify-center rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--hover-bg)] transition-colors"
-            aria-label="打开万能命令台"
-            title="命令台"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
-          </button>
-          <SimplifiedToggle />
-          <ReadingSettings />
-          <ThemeSwitcher />
-          <VerticalModeToggle />
-          <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[var(--hover-bg)] transition-colors ml-1"
+            className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[var(--hover-bg)] transition-colors ml-2"
             aria-label={menuOpen ? "关闭菜单" : "打开菜单"}
             aria-expanded={menuOpen}
             aria-controls="mobile-menu"
@@ -360,6 +371,7 @@ function NavigationContent() {
               viewBox="0 0 24 24"
               stroke="currentColor"
               strokeWidth={1.5}
+              aria-hidden="true"
             >
               {menuOpen ? (
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -388,6 +400,8 @@ function NavigationContent() {
                 <Link
                   key={link.href}
                   href={link.href}
+                  prefetch={false}
+                  aria-current={isActive(link.href) ? "page" : undefined}
                   className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
                     isActive(link.href)
                       ? "text-[var(--text-accent)] bg-[var(--hover-bg)] font-medium"
@@ -410,6 +424,7 @@ function NavigationContent() {
                     key={item.href}
                     href={item.href}
                     prefetch={false}
+                    aria-current={isActive(item.href) ? "page" : undefined}
                     className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
                       isActive(item.href)
                         ? "text-[var(--text-accent)] bg-[var(--hover-bg)] font-medium"
