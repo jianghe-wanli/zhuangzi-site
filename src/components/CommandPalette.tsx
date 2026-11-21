@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
+import { JIAZHU_MODE_KEY } from "@/lib/reading-prefs";
+
 import { useTheme } from "./ThemeProvider";
 
 interface ChapterItem {
@@ -244,7 +246,8 @@ export default function CommandPalette({
         perform: () => {
           const isJiazhu = document.documentElement.classList.toggle("jiazhu-mode");
           try {
-            localStorage.setItem("jiazhuMode", isJiazhu ? "true" : "false");
+            // 与阅读设置面板同一个键与取值，否则刷新后不保留
+            localStorage.setItem(JIAZHU_MODE_KEY, isJiazhu ? "jiazhu" : "standard");
           } catch {}
           closePalette();
         },
