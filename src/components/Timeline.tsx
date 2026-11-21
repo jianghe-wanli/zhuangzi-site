@@ -106,11 +106,14 @@ export default function Timeline() {
                     <span className="block text-sm font-medium text-[var(--text-primary)]">
                       {event.event}
                     </span>
-                    {isExpanded && (
-                      <span className="block mt-2 text-xs text-[var(--text-secondary)] leading-relaxed">
-                        {event.description}
-                      </span>
-                    )}
+                    {/* 说明始终在 DOM 里（爬虫 / 无 JS 可读），折叠时用 hidden 类收起（不用 hidden 属性：preflight 的分层 !important 规则无法被覆盖）；
+                        页面里的 <noscript> 样式会在无 JS 时把它们全部展开 */}
+                    <span
+                      data-tl-desc=""
+                      className={`mt-2 text-xs text-[var(--text-secondary)] leading-relaxed ${isExpanded ? "block" : "hidden"}`}
+                    >
+                      {event.description}
+                    </span>
                   </button>
                 </div>
               </li>

@@ -533,7 +533,12 @@ export default function ThoughtMap() {
         </div>
 
         {/* D3 容器 */}
-        <div ref={containerRef} className="w-full h-[460px] sm:h-[560px]" />
+        <div
+          ref={containerRef}
+          role="img"
+          aria-label="思想脉络力导向图：内篇七章与核心概念的关联。选中节点的释义与关联项以文字列在图下方，可用其中的按钮切换焦点"
+          className="w-full h-[460px] sm:h-[560px]"
+        />
       </div>
 
       {/* 底部：选中节点深度详情考释匣 */}
