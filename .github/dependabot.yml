@@ -1,0 +1,26 @@
+# 依赖更新：每月一次，按生态分组成一个 PR，避免噪音。
+# next / react / eslint-config-next 须同步升级并人工验证静态导出产物，不走自动更新。
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: next
+      - dependency-name: eslint-config-next
+      - dependency-name: react
+      - dependency-name: react-dom
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
