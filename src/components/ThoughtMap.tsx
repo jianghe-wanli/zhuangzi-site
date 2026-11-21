@@ -1,12 +1,12 @@
 "use client";
 
-import type * as d3Type from "d3";
+import type { Simulation, SimulationLinkDatum, SimulationNodeDatum } from "d3-force";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { concepts } from "@/data/concepts";
 
-interface MapNode extends d3Type.SimulationNodeDatum {
+interface MapNode extends SimulationNodeDatum {
   id: string;
   name: string;
   title: string;
@@ -16,7 +16,7 @@ interface MapNode extends d3Type.SimulationNodeDatum {
   relatedIds: string[];
 }
 
-interface MapLink extends d3Type.SimulationLinkDatum<MapNode> {
+interface MapLink extends SimulationLinkDatum<MapNode> {
   source: string | MapNode;
   target: string | MapNode;
   value: number;
@@ -184,12 +184,20 @@ export default function ThoughtMap() {
   // 渲染 D3 力导向图
   useEffect(() => {
     let cancelled = false;
-    let simulation: d3Type.Simulation<MapNode, undefined> | null = null;
+    let simulation: Simulation<MapNode, undefined> | null = null;
     const container = containerRef.current;
     if (!container) return;
 
     async function init() {
-      const d3 = await import("d3");
+      // 只取力导向图用到的四个子包（force / selection / zoom / drag）。
+      // 原来 import("d3") 会把 geo / scale / shape 等整包（约 95KB gzip）一并拉下来。
+      const [forceMod, selectionMod, zoomMod, dragMod] = await Promise.all([
+        import("d3-force"),
+        import("d3-selection"),
+        import("d3-zoom"),
+        import("d3-drag"),
+      ]);
+      const d3 = { ...forceMod, ...selectionMod, ...zoomMod, ...dragMod };
       if (cancelled || !container) return;
 
       const width = container.clientWidth || 760;
