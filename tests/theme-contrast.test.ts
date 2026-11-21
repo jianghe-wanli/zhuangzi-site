@@ -147,7 +147,7 @@ describe("主题系统完整性", () => {
     const end = css.indexOf(THEME_CSS_END);
     expect(start, "globals.css 缺少调色板起始标记").toBeGreaterThan(-1);
     expect(end, "globals.css 缺少调色板结束标记").toBeGreaterThan(start);
-    const actual = css.slice(start + THEME_CSS_START.length, end).trim();
+    const actual = css.slice(start + THEME_CSS_START.length, end).replace(/\r\n/g, "\n").trim();
     // 不一致时，把 Expected 的内容粘贴到 globals.css 两个标记之间
     expect(actual).toBe(buildThemeCss());
   });

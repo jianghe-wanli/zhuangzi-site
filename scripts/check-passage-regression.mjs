@@ -46,10 +46,24 @@ ok(!qiwu.includes("split-view"), "初始无 split-view 类（hydration 一致）
 ok(!qiwu.includes("pinyin-on"), "初始无 pinyin-on 类");
 // 1b) 静态块：正文只在 HTML 里出现一次，不进内联 RSC 载荷
 console.log("— 静态块（正文不重复进 RSC 载荷）—");
-const rscOf = (html) =>
-  [...html.matchAll(/<script>self\.__next_f\.push\(\[1,"([\s\S]*?)"\]\)<\/script>/g)]
-    .map((m) => JSON.parse(`"${m[1]}"`))
-    .join("");
+const rscOf = (html) => {
+  const chunks = [];
+  for (const [, body] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
+    let pos = 0;
+    while ((pos = body.indexOf('self.__next_f.push([1,"', pos)) !== -1) {
+      const strStart = pos + 'self.__next_f.push([1,'.length;
+      let i = strStart + 1;
+      while (i < body.length) {
+        if (body[i] === "\\") i += 2;
+        else if (body[i] === '"') break;
+        else i++;
+      }
+      chunks.push(JSON.parse(body.slice(strStart, i + 1)));
+      pos = i + 1;
+    }
+  }
+  return chunks.join("");
+};
 const qiwuBlocks = JSON.parse(readFileSync(join(OUT, "chapters", "02-qiwu-lun", "blocks.json"), "utf8"));
 const qiwuRsc = rscOf(qiwu);
 // 取首段原文中段的一截（开头 12 字会作为目录短标题进 ChapterTOC 的 props）
