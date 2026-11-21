@@ -2,19 +2,22 @@
   "name": "zhuangzi-site",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/validate-data.mjs && node scripts/gen-og-images.mjs && node scripts/gen-lazy-data.mjs && next build && node scripts/fix-rsc-payload-paths.mjs && node scripts/clean-duplicate-payload.mjs && node scripts/bump-sw-version.mjs",
-    "start": "next start",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"functions/**/*.js\"",
+    "start": "wrangler pages dev out --port 8788",
+    "lint": "eslint --cache --cache-location .cache/eslint/ --max-warnings 0 \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\" \"scripts/**/*.mjs\" \"functions/**/*.js\" \"public/sw.js\" \"*.{ts,mjs}\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm run lint && node scripts/validate-data.mjs && npm run test",
     "budget": "node scripts/check-budget.mjs",
     "check:output": "node scripts/check-output.mjs",
-    "deploy": "npm run build && node scripts/clean-duplicate-payload.mjs && wrangler pages deploy out --project-name zhuangzi-site",
-    "clean": "rm -rf .next out"
+    "deploy": "npm run build && node scripts/check-output.mjs && wrangler pages deploy out --project-name zhuangzi-site",
+    "clean": "node -e \"for (const d of ['.next','out','.cache']) require('node:fs').rmSync(d,{recursive:true,force:true})\""
   },
   "dependencies": {
     "d3": "^7.9.0",
@@ -29,7 +32,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/d3": "^7.4.3",
     "@types/leaflet": "^1.9.21",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
