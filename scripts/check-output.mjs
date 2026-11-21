@@ -13,6 +13,7 @@
  *
  * 运行：node scripts/check-output.mjs
  */
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -260,6 +261,58 @@ if (existsSync(sitemapPath) && /<loc>[^<]*\.json<\/loc>/.test(readFileSync(sitem
   note("sitemap 收录了 .json 路径");
 }
 
+// ── 10d：每页 CSP meta 里的 script hash 与页面内联脚本一一对应 ──
+// 刻意不复用 inject-csp-meta.mjs 的解析函数：这里用另一种写法（顺序扫描）复算，
+// 两边任何一边解析有偏差都会在这里对不上。浏览器端的最终验证在 scripts/smoke.mjs。
+function executableInlineHashes(html) {
+  const hashes = new Set();
+  let pos = 0;
+  for (;;) {
+    const open = html.indexOf("<script", pos);
+    if (open < 0) break;
+    const tagEnd = html.indexOf(">", open);
+    const close = html.indexOf("</script>", tagEnd);
+    if (tagEnd < 0 || close < 0) break;
+    const attrs = html.slice(open + 7, tagEnd);
+    const body = html.slice(tagEnd + 1, close);
+    pos = close + 9;
+    if (/\ssrc\s*=/.test(attrs) || body === "") continue;
+    const type = (/\stype\s*=\s*["']?([^"'\s>]*)/.exec(attrs)?.[1] ?? "").toLowerCase();
+    if (type && !["text/javascript", "application/javascript", "module"].includes(type)) continue;
+    const text = body.replace(/\r\n?/g, "\n");
+    hashes.add("sha256-" + createHash("sha256").update(text, "utf8").digest("base64"));
+  }
+  return hashes;
+}
+let cspPages = 0;
+let cspHashTotal = 0;
+for (const file of files.filter((f) => f.endsWith(".html"))) {
+  const route = "/" + relative(OUT, file).replace(/\\/g, "/");
+  const html = readFileSync(file, "utf8");
+  const metas = [...html.matchAll(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"\s*\/?>/g)];
+  if (metas.length !== 1) {
+    note(`${route}: 应有且仅有 1 个 CSP <meta>，实际 ${metas.length} 个（inject-csp-meta.mjs 未执行？）`);
+    continue;
+  }
+  const [meta] = metas;
+  const firstScript = html.indexOf("<script");
+  if (firstScript >= 0 && meta.index > firstScript) note(`${route}: CSP <meta> 出现在脚本之后，对之前的脚本不生效`);
+  const policy = meta[1];
+  if (!policy.startsWith("script-src 'self'")) note(`${route}: CSP <meta> 不是 script-src 策略`);
+  if (/unsafe-inline|unsafe-eval|unsafe-hashes|\*/.test(policy)) note(`${route}: CSP <meta> 含宽松来源`);
+  const declared = new Set([...policy.matchAll(/'(sha256-[A-Za-z0-9+/=]+)'/g)].map((m) => m[1]));
+  const actual = executableInlineHashes(html);
+  const missing = [...actual].filter((h) => !declared.has(h));
+  const stale = [...declared].filter((h) => !actual.has(h));
+  if (missing.length) note(`${route}: ${missing.length} 个内联脚本不在 CSP <meta> 里（会被浏览器拦截）`);
+  if (stale.length) note(`${route}: CSP <meta> 里有 ${stale.length} 个 hash 对不上任何内联脚本`);
+  if (/<[a-z][^>]*\son[a-z]+\s*=\s*["']/i.test(html.replace(/<script\b[\s\S]*?<\/script>/g, ""))) {
+    note(`${route}: 存在内联事件处理属性（被 script-src-attr 'none' 拦截）`);
+  }
+  cspPages++;
+  cspHashTotal += declared.size;
+}
+
 // ── 11：Service Worker 离线页 ──
 const offlinePath = join(OUT, "offline", "index.html");
 if (!existsSync(offlinePath)) note("缺少 /offline/（sw.js 的离线兜底页）");
@@ -282,6 +335,7 @@ console.log(`canonical 指向首页  ${homeCanonical}   (历史基线: 22)`);
 console.log(`缺少 canonical      ${missingCanonical}`);
 console.log(`使用默认标题        ${genericTitle}   (历史基线: 15)`);
 console.log(`站内断链            ${brokenLinks.size}`);
+console.log(`CSP 脚本 hash       ${cspPages} 页 / ${cspHashTotal} 个`);
 if (sliceWarning) console.log(sliceWarning);
 console.log(`分享图缺失          ${missingOg}`);
 console.log("".padEnd(58, "-"));

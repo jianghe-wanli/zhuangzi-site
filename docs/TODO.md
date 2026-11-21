@@ -206,7 +206,7 @@ node scripts/check-passage-regression.mjs  # 章节页产物结构回归
 | 3.4 | **死代码** | 删除 `ChapterNav`、`CrossReferencePanel`、`InkWashEffect`、`ShareCard`（零引用，约 20KB） |
 | 3.5 | **剩余无障碍** | 搜索结果数 `role="status" aria-live`；批注「已保存」`aria-live`；导航下拉补 `role=menu`/`menuitem` + 方向键/Home/End（`handleMenuKeyDown`/`handleTriggerKeyDown`）；标题跳级修复（h4→h3，Footer 的 h4→p）；10-11px 小字 CSS 统一提到 12px（`[class~="text-[10px]"]` 覆盖）；⌘K 全站可用（KeyboardNav 补处理）；沉浸模式工具条常驻（退出入口不再藏 hover 里） |
 | 3.6 | **`.stat-number` 渐变文字** | 默认纯色 + `@supports` 才叠加渐变（渐变失效时文字可见） |
-| 3.7 | **CSP 去 `unsafe-inline`** | **保持现状**：RSC payload（`self.__next_f.push`）是每页不同的内联 `<script>`，静态 `_headers` 无法穷举 hash；JSON-LD 是 `ld+json`（不执行，不受 script-src 约束）。可行路径仍是 roadmap 三方案（Workers nonce / Next 配置外置 payload——需验证 Next 16 支持）。已做：`img-src` 移除 cdnjs（图标自托管） |
+| 3.7 | **CSP 去 `unsafe-inline`** | **script-src 已收紧**：`scripts/inject-csp-meta.mjs` 构建后为每个 HTML 现算全部内联脚本的 sha256，注入每页 `<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-…'">`；与响应头策略取交集后，只有构建时就在页面里的内联脚本能执行（响应头里的 `'unsafe-inline'` 必须保留，否则带 hash 的脚本过不了那一条）。相邻的 `__next_f` 载荷脚本先合并（全站 2722 → 433 个），每页 HTML 原始字节平均 −78 B、gzip +279 B。`check-output` 复算比对，`npm run smoke` 用真实 Chrome 验证无违规且运行时注入的脚本被拦。**style-src 仍为 `'unsafe-inline'`**（见第 4 节） |
 | 3.8 | **DO 限流** | **保持现状**：Cache API 限流同 colo 内共享，个人站点量级足够；严格配额需 Durable Object/KV 账户绑定（`wrangler.toml` 配置），属部署架构决策，未擅自加绑定 |
 | 3.9 | **自托管 cdnjs 图标** | Leaflet 标记图标 3 个文件下载至 `public/vendor/leaflet/`；`ZhuangziMap.tsx` 改本地引用；CSP `img-src` 移除 cdnjs 域名；privacy/SW 注释同步 |
 | 3.10 | **Zod 边界校验** | `scripts/data-schema.mjs` + `scripts/validate-data.mjs`：构建期 safeParse 全部 46 个数据文件（33 篇 + 概念/考据/语料），形状不合规即中断构建。zod 仅 devDependencies（**零客户端成本**）。已接入 `npm run verify` 与 `build`。校验立刻抓到 3 处真实形状偏差（fables/concordance/reading-routes 字段名与 Schema 不符） |
@@ -226,7 +226,7 @@ node scripts/check-passage-regression.mjs  # 章节页产物结构回归
 | **`og:locale` 保留 `zh_CN`** | 与 `inLanguage: "zh-Hans"` 遵循**不同规范**：OG 用 `语言_地区`（`zh-Hans` 不是合法 og:locale 值），HTML `lang` 与 schema.org 用 BCP-47 文字标签。为「统一」而改会写出无效值 |
 | **不加 COEP `require-corp`** | 仍会拦掉高德瓦片（不带 CORP 头）。Leaflet 图标已自托管（3.9），障碍只剩瓦片 |
 | **`hasPart`/`Quotation` 不放根布局** | 33+27+44 条长列表若放根布局会被塞进全部 85 个页面的 JSON-LD，白白增加每页体积。现各自放在 `/chapters`、`/concepts`、`/quotes` 枢纽页 |
-| **CSP 仍保留 `script-src 'unsafe-inline'`** | RSC payload 内联脚本每页不同，静态 `_headers` 无法穷举 hash（见 3.7） |
+| **CSP `style-src` 仍保留 `'unsafe-inline'`** | 产物里共 1355 处 `style="…"` 属性（React 行内样式，平均每页 15 处），hash 不适用于属性；styled-jsx / Leaflet 还会在运行时插入 `<style>`。`script-src` 已用每页 hash 收紧（见 3.7） |
 | **限流仍用 Cache API** | 跨 colo 不共享是已知限制，个人站量级足够；DO/KV 需账户级绑定（见 3.8） |
 | **未加 `no-floating-promises`** | 需要 type-aware lint 基建（typescript-eslint projectService），现有代码为事件处理器内 async 调用，误报风险高 |
 | **CI 不重跑字体子集化** | woff2 产物已提交仓库（1.56MB）；子集脚本 `scripts/subset-font.py` 需 Python+fontTools+25MB 源字体，仅在数据用字变化时本地重跑 |

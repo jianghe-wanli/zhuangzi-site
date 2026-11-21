@@ -21,12 +21,13 @@ npm run dev          # http://localhost:3000
 | 命令 | 作用 |
 | --- | --- |
 | `npm run dev` | 本地开发服务器 |
-| `npm run build` | 生产构建（导出到 `out/`，并刷新 SW 缓存版本号） |
+| `npm run build` | 生产构建（导出到 `out/`，为每页注入 CSP 脚本 hash，并刷新 SW 缓存版本号） |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint（覆盖 `src/`、`tests/`、`scripts/`、`functions/`、`public/sw.js` 与根目录配置；带缓存，警告即失败） |
 | `npm test` | 数据完整性、主题对比度、简繁映射、检索、Service Worker、`/api/chat` 边缘函数、manifest |
 | `npm run verify` | typecheck + lint + 数据 schema 校验 + test，提交前跑一遍 |
 | `npm run budget` | 首屏体积预算检查（需先 build） |
+| `npm run smoke` | 无头 Chrome 冒烟（需先 build）：首页/篇章/概念/搜索/404/离线页无控制台报错与 CSP 违规，客户端路由与 SW 离线回放可用 |
 | `npm run deploy` | 构建 → 产物自检 → 发布到 Cloudflare Pages |
 | `npm start` | 用 `wrangler pages dev` 本地预览 `out/`（含 `_headers` 与 `/api/chat`，最接近线上） |
 | `npm run clean` | 删除 `.next/`、`out/`、`.cache/` |
@@ -178,13 +179,16 @@ Next.js 的 metadata 会向下继承。根布局一旦写 `alternates.canonical`
 
 ### 缓存与离线
 
-* **响应头**（`public/_headers`）：只有 `/_next/static/*`（文件名带内容哈希）是
-  一年 `immutable`；图片、字体分片、JSON 文件名不带哈希，用短 `max-age` +
-  `stale-while-revalidate`。HTML 与 RSC 载荷用 Pages 默认的 `max-age=0, must-revalidate`。
+* **响应头**（`public/_headers`）：`/_next/static/*` 与 `/fonts/slices/*`（文件名带内容哈希）
+  是一年 `immutable`；图片、其余字体用短 `max-age` + `stale-while-revalidate`；
+  JSON 一小时，但页面正文块 `**/blocks.json` 每次校验（须与同次构建的 RSC 载荷配套）。
+  HTML 与 RSC 载荷用 Pages 默认的 `max-age=0, must-revalidate`。
 * **Service Worker**（`public/sw.js`）：哈希资源进不随发版清空的 `zhuangzi-immutable`；
-  页面与 RSC 载荷 Network-First（慢网 4 秒超时先用缓存）；JSON 用 SWR；
+  页面、RSC 载荷与 `blocks.json` Network-First（慢网 4 秒超时先用缓存）；其余 JSON 用 SWR；
   其余缓存名里的版本号由构建脚本替换为 build ID，发版即失效。
   离线且无缓存时显示自包含的 `/offline/`（`public/offline/index.html`），列出本机已缓存可读的页面。
+* **CSP**：`script-src` 由每页 `<meta>` 里的 sha256 清单收紧（`scripts/inject-csp-meta.mjs`
+  构建后现算），新增或修改内联脚本无需改配置；`style-src` 仍需 `'unsafe-inline'`。
 * 改动 `_headers` / `_redirects` 后用 `npm start` 实测响应头；`check-output.mjs` 会校验 Pages 的硬限制。
 
 > 这一架构的固有弱点是**用户密钥途经本站**。若要长期运营，

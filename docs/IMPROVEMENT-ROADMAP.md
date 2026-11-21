@@ -398,27 +398,21 @@ localStorage 里的明文密钥。
 
 ### 2. CSP 收紧
 
-现为 `script-src 'self' 'unsafe-inline'`。第二轮已补齐其余指令
-（`worker-src`/`manifest-src`/`frame-src`/`upgrade-insecure-requests`）
-并合并了重复的 `/*` 区块，但 `'unsafe-inline'` **仍无法移除**，原因是：
+**script-src：已落地（每页 hash）。** 静态 `_headers` 无法按页列 hash，也发不了 nonce；
+改由 `scripts/inject-csp-meta.mjs` 在构建后为每个 HTML 计算其全部可执行内联脚本的
+sha256，注入每页 `<meta http-equiv="Content-Security-Policy">`。浏览器对响应头与
+meta 两条策略取交集，所以响应头里虽然还写着 `'unsafe-inline'`（不能删，否则带 hash
+的脚本过不了响应头那一条），实际能执行的内联脚本只有构建时就在页面里的那些。
 
-* 防闪烁主题脚本必须**同步内联**执行，否则首帧会闪出默认配色；
-* 各页 JSON-LD 必须内联（`application/ld+json` 不支持外链 `src`），
-  而其内容**每页不同** → hash 无法穷举；
-* `_headers` 是静态文件，Cloudflare Pages 无法按请求下发 nonce。
+* hash 构建后现算，改主题脚本 / 新增内联脚本无需改配置；
+* 相邻的 `self.__next_f.push(...)` 载荷脚本先合并为一个，每页 hash 数从 30~57 降到约 5；
+* `check-output.mjs` 用另一套解析复算比对；`npm run smoke` 在真实 Chrome 里验证
+  首屏、客户端路由、404、离线页、SW 缓存回放均无违规，且运行时注入的内联脚本会被拦下。
 
-可行的收紧路径（按代价排序）：
+**style-src：不可收紧。** 产物里有 1355 处 `style="…"` 属性（React 行内样式），hash
+不适用于属性；styled-jsx / Leaflet 运行时还会插入 `<style>`。
 
-1. 把主题脚本改为**外部文件** + 其 sha256 hash 入 CSP，
-   JSON-LD 则改由构建期为每个页面目录生成独立 `_headers` 规则
-   （Cloudflare `_headers` 支持按路径匹配，可为每个路由写各自的 hash）。
-2. 或改用 Cloudflare Workers（而非纯静态 Pages）下发 per-request nonce。
-3. 现阶段的缓解措施：全站进入 `dangerouslySetInnerHTML` 的内容
-   统一走 `src/lib/markup.ts` 的 `renderEmphasis()`（先转义再还原粗体），
-   已消除唯一的未转义注入通道。
-
-另可考虑 `style-src` 去掉 `'unsafe-inline'`（Next.js 的 hydration 内联样式
-是主要障碍，需实测），以及加 CSP report 端点收集违规。
+**违规上报：不做。** 本站没有可接收并留存报告的后端。
 
 ### 3. 检索质量
 
