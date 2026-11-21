@@ -19,7 +19,7 @@
 ## 0. 开工前先跑一遍，确认基线没坏
 
 ```bash
-npm run verify          # typecheck + lint + Zod 数据校验 + 143 个测试
+npm run verify          # typecheck + lint + Zod 数据校验 + 193 个测试
 npm run build
 node scripts/check-output.mjs    # canonical / sitemap / robots / 断链 / OG 图 / _headers / SW
 node scripts/check-budget.mjs    # 首屏体积（绝对上限 + 相对 budget.json 基线 5%）
@@ -28,17 +28,17 @@ node scripts/check-passage-regression.mjs  # 章节页产物结构回归
 
 **当前基线（改动后必须不退化）**
 
-| 指标 | 当前值 | 上次收尾值 |
+| 指标 | 当前值（2026-11） | 上次收尾值 |
 | --- | --- | --- |
 | typecheck / lint | 0 错 | 0 错 |
-| 测试 | 143 passed（+SW 19、/api/chat 20、manifest 3） | 101 passed |
+| 测试 | 193 passed | 143 passed |
 | 路由数 | 86（另有自包含的 /offline/，不计入体积统计） | 86 |
 | canonical 指向首页 | 0 | 0 |
 | 使用默认标题 | 0 | 0 |
 | 站内断链 / 分享图缺失 | 0 / 0（新增门禁） | 未检查 |
-| 共享 JS 基线（gzip） | 158.9 KB（新口径：不含 noModule polyfill 38.6 KB） | 197.5 KB（旧口径） |
-| 最重路由 | 278.0 KB（/concepts/dao） | 316.6 KB（旧口径） |
-| `out/` 总体积 | 41.5 MB | 43.7 MB |
+| 共享 JS 基线（gzip） | 146.5 KB（不含 noModule polyfill 38.6 KB） | 158.9 KB |
+| 最重路由 | 222.6 KB（/chapters/01-xiaoyao-you） | 278.0 KB（/concepts/dao） |
+| `out/` 总体积 | 26.3 MB | 41.5 MB |
 | OG 分享图（60 张） | 1.78 MB | 4.00 MB |
 | 站内零入链路由 | 0（/annotations 为分享落地页，刻意不加） | 0 |
 

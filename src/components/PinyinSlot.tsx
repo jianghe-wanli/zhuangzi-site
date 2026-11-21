@@ -45,7 +45,7 @@ export default function PinyinSlot() {
   }, []);
 
   return (
-    <div ref={ref} className="pinyin-original" hidden={!on}>
+    <div ref={ref} className="pinyin-original reading-prose tracking-wide text-lg sm:text-xl" hidden={!on}>
       {on && <PinyinAnnotator text={text} enabled={true} />}
     </div>
   );

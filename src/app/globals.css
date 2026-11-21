@@ -1034,6 +1034,10 @@ button.bg-\[var\(--text-accent\)\],
 }
 .pinyin-on .pinyin-original {
   display: block;
+  /* 与 .original-text 同字号同色；行高加大给注音留位
+     （此前这里没有任何排版类，注音版继承正文默认字号，行间互相重叠） */
+  line-height: 2.6;
+  color: var(--text-primary);
 }
 
 /* 批注面板：默认隐藏；annotation-on 时显示 */

@@ -203,10 +203,10 @@ Next.js 的 metadata 会向下继承。根布局一旦写 `alternates.canonical`
 
 | 指标 | 数值 |
 | --- | --- |
-| 共享 JS 基线（每个路由） | 158.9 KB |
-| 最重路由 `/concepts/dao` | 278.0 KB（HTML 103.1 + JS 158.9 + CSS 16.0） |
-| 最重章节页 `/chapters/01-xiaoyao-you` | 271.0 KB（HTML 79.2 + JS 175.8 + CSS 16.0） |
-| `out/` 总体积 | 41.5 MB |
+| 共享 JS 基线（每个路由） | 146.5 KB |
+| 最重路由 `/chapters/01-xiaoyao-you` | 222.6 KB（HTML 36.4 + JS 161.6 + CSS 24.6） |
+| 最重概念页 `/concepts/dao` | 220.4 KB（HTML 48.0 + JS 147.8 + CSS 24.6） |
+| `out/` 总体积 | 26.3 MB |
 
 JS 只计现代浏览器实际下载的脚本：Next 每页输出的 `<script noModule>` polyfill
 （38.6 KB）不计入。旧口径（计入 polyfill）下共享基线为 197.5 KB。
