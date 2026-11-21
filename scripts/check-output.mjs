@@ -192,6 +192,7 @@ const resolves = (path) => {
   return fileSet.has(p) || fileSet.has(`${p}/index.html`) || fileSet.has(`${p}.html`);
 };
 const brokenLinks = new Map();
+const brokenAnchors = new Set();
 let missingOg = 0;
 for (const file of pages) {
   const html = readFileSync(file, "utf8");
@@ -201,6 +202,19 @@ for (const file of pages) {
     const target = m[1];
     if (target.startsWith("//") || target.startsWith("/api/")) continue;
     if (!resolves(target) && !brokenLinks.has(target)) brokenLinks.set(target, route);
+  }
+  // 页内锚点：<a href="#x"> 必须在同页有 id="x"（曾因正文改走 StaticBlock 丢过 #chapter-conclusion）
+  for (const m of html.matchAll(/<a\b[^>]*?\shref="#([^"]+)"/g)) {
+    let id = m[1];
+    try {
+      id = decodeURIComponent(id);
+    } catch {
+      /* 保持原样比对 */
+    }
+    if (!html.includes(` id="${id}"`)) {
+      const key = `${route}#${id}`;
+      brokenAnchors.add(key);
+    }
   }
   for (const m of html.matchAll(/<meta (?:property="og:image"|name="twitter:image") content="([^"]+)"/g)) {
     const url = m[1];
@@ -212,6 +226,7 @@ for (const file of pages) {
   }
 }
 for (const [target, route] of brokenLinks) note(`站内断链 ${target}（首见于 ${route}）`);
+for (const a of brokenAnchors) note(`页内锚点无目标 ${a}`);
 
 // ── 10：Cloudflare Pages 配置文件的硬限制 ──
 const headersPath = join(OUT, "_headers");
@@ -335,6 +350,7 @@ console.log(`canonical 指向首页  ${homeCanonical}   (历史基线: 22)`);
 console.log(`缺少 canonical      ${missingCanonical}`);
 console.log(`使用默认标题        ${genericTitle}   (历史基线: 15)`);
 console.log(`站内断链            ${brokenLinks.size}`);
+console.log(`页内锚点无目标      ${brokenAnchors.size}`);
 console.log(`CSP 脚本 hash       ${cspPages} 页 / ${cspHashTotal} 个`);
 if (sliceWarning) console.log(sliceWarning);
 console.log(`分享图缺失          ${missingOg}`);

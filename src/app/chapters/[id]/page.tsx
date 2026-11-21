@@ -131,6 +131,7 @@ export default async function ChapterPage({ params }: Props) {
           <StaticBlock
             src={src} rev={rev}
             id="conclusion"
+            anchorId="chapter-conclusion"
             as="section"
             className="cv-auto scroll-mt-24 mt-16 pt-8 border-t border-[var(--border-light)]"
           />

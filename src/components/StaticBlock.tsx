@@ -94,6 +94,8 @@ interface StaticBlockProps {
   /** 本页 blocks.json 的站内路径（客户端路由进入时由此取内容） */
   src: string;
   id: string;
+  /** 根元素的 DOM id（页内锚点目标）；`id` 只是 blocks.json 里的块名 */
+  anchorId?: string;
   as?: string;
   className?: string;
   /** 只在 HTML 直出时有意义的块（如 JSON-LD）：客户端路由进入时不渲染 */
@@ -113,7 +115,7 @@ interface StaticBlockProps {
  *
  * 内容生成与登记见 src/lib/static-html.ts。
  */
-export default function StaticBlock({ src, id, as = "div", className, ssrOnly, type, rev }: StaticBlockProps) {
+export default function StaticBlock({ src, id, anchorId, as = "div", className, ssrOnly, type, rev }: StaticBlockProps) {
   const key = `${src}#${id}`;
   const router = useRouter();
   const [initial] = useState(() => initialHtml(src, key, ssrOnly));
@@ -184,6 +186,7 @@ export default function StaticBlock({ src, id, as = "div", className, ssrOnly, t
   if (html === ABSENT) return null;
 
   return createElement(as, {
+    id: anchorId,
     className,
     type,
     "data-sb": key,
