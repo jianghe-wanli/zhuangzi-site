@@ -117,6 +117,34 @@ function quotesByPassageOf(chapter: Chapter): Map<string, PassageQuote[]> {
   return quotesByPassage;
 }
 
+/**
+ * 段落工具条图标的 SVG sprite（PassageToolbar 的 <use href="#tb-…"> 引用）。
+ * 每个图标的 path 全页只出现这一次，而不是每段每个按钮各内联一份。
+ */
+const TOOLBAR_ICONS: Record<string, string> = {
+  star: "M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z",
+  pencil: "M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z",
+  check: "M4.5 12.75l6 6 9-13.5",
+  clipboard: "M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184",
+  link: "M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244",
+  "eye-off": "M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88",
+  columns: "M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z",
+  stop: "M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z",
+  speaker: "M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z",
+};
+
+function ToolbarSprite() {
+  return (
+    <svg aria-hidden="true" className="hidden">
+      {Object.entries(TOOLBAR_ICONS).map(([name, d]) => (
+        <symbol key={name} id={`tb-${name}`} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d={d} />
+        </symbol>
+      ))}
+    </svg>
+  );
+}
+
 /** 章节页全部静态块（纯静态；站内链接为普通 <a>，由 StaticBlock 委托 SPA 导航） */
 export function chapterBlocks(chapter: Chapter): Record<string, string> {
   const { prev, next } = getAdjacentChapters(chapter.id);
@@ -130,6 +158,7 @@ export function chapterBlocks(chapter: Chapter): Record<string, string> {
   const blocks: Record<string, string> = {
     head: renderStatic(
       <>
+        <ToolbarSprite />
         <div className="mb-12">
           <div className="flex items-center gap-2 mb-4">
             <a href={internalHref("/chapters")} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-accent)] transition-colors">

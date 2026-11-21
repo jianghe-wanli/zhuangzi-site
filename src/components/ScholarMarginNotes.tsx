@@ -3,10 +3,16 @@
 import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
-interface ScholarMarginNotesProps {
+import { subscribeCurrentPassage } from "@/lib/passage-dom";
+
+export interface ScholarMarginNotesProps {
   chapterId: string;
   chapterTitle: string;
   passageCount: number;
+  /** 由懒加载外壳传入：用户点了朱印按钮才加载本组件时，加载完直接打开抽屉 */
+  initialDrawerOpen?: boolean | undefined;
+  /** 由懒加载外壳传入：加载前用户最后聚焦的注词 */
+  initialTerm?: string | null | undefined;
 }
 
 interface Citation {
@@ -68,14 +74,16 @@ function loadRelatedData(): Promise<Record<string, RelatedPassage[]>> {
 export default function ScholarMarginNotes({
   chapterId,
   passageCount,
+  initialDrawerOpen = false,
+  initialTerm = null,
 }: ScholarMarginNotesProps) {
   // 当前处于视口中的段落索引（1-indexed）
   const [activePassageIndex, setActivePassageIndex] = useState<number>(1);
   const [kaojuData, setKaojuData] = useState<KaojuData | null>(null);
-  const [focusedTerm, setFocusedTerm] = useState<string | null>(null);
+  const [focusedTerm, setFocusedTerm] = useState<string | null>(initialTerm);
   const [quoteExcerpts, setQuoteExcerpts] = useState<{ text: string; theme: string }[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>("meipi");
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
   const [isWideDesktop, setIsWideDesktop] = useState(false);
   const [relatedPassages, setRelatedPassages] = useState<RelatedPassage[]>([]);
 
@@ -126,29 +134,13 @@ export default function ScholarMarginNotes({
       return quotes.slice(0, 2);
     };
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const id = entry.target.id;
-            const matchedPassages = Array.from(passageElements);
-            const index = matchedPassages.findIndex((el) => el.id === id);
-            if (index !== -1) {
-              setActivePassageIndex(index + 1);
-              setQuoteExcerpts(extractQuotes(entry.target as HTMLElement));
-            }
-            break;
-          }
-        }
-      },
-      {
-        rootMargin: "-15% 0px -55% 0px",
-        threshold: 0,
-      }
-    );
-
-    passageElements.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
+    const all = Array.from(passageElements);
+    return subscribeCurrentPassage((el) => {
+      const index = all.indexOf(el);
+      if (index === -1) return;
+      setActivePassageIndex(index + 1);
+      setQuoteExcerpts(extractQuotes(el));
+    });
   }, [passageCount]);
 
   // 3. 监听注词聚焦事件

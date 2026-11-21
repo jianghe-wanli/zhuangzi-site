@@ -3,7 +3,7 @@ import { findKaoju, type KaojuEntry } from "@/lib/kaoju-utils";
 import { renderEmphasis } from "@/lib/markup";
 import { internalHref, renderStatic, staticBlocksRev } from "@/lib/static-html";
 
-import AnnotationPanel from "./AnnotationPanel";
+import { AnnotationSlot } from "./ChapterLazyIslands";
 import { StaticConceptTag } from "./ConceptTag";
 import KaojuSection from "./KaojuSection";
 import PassageToolbar from "./PassageToolbar";
@@ -234,6 +234,7 @@ function AnnotatedText({ original, annotations, quotes }: { original: string; an
               aria-label={`${seg.ann.term} — 查看注释`}
               className="word-anno inline cursor-help text-left font-[inherit] text-[inherit] leading-[inherit] bg-transparent p-0 border-0 align-baseline"
             >
+              {/* 下划线必须画在内层 span 上：按钮是 inline-block，边框画在按钮上会把线下移并撑高行框 */}
               <span
                 className={`border-b-2 border-dotted border-[var(--text-accent)]/40 hover:border-[var(--text-accent)] focus-visible:border-[var(--text-accent)] transition-colors${halo ? " quote-halo" : ""}`}
               >
@@ -243,7 +244,7 @@ function AnnotatedText({ original, annotations, quotes }: { original: string; an
           );
         }
         if (quoteRanges.length === 0) {
-          return <span key={i}>{seg.text}</span>;
+          return seg.text;
         }
         return intersectQuotes(seg.text, start, quoteRanges).map((p, j) =>
           // 名句被逐字注切断后，剩余片段可能只剩标点（如「，」夹在两个
@@ -258,7 +259,7 @@ function AnnotatedText({ original, annotations, quotes }: { original: string; an
               {p.text}
             </a>
           ) : (
-            <span key={`${i}-${j}`}>{p.text}</span>
+            p.text
           )
         );
       })}
@@ -451,10 +452,8 @@ export default function PassageView({ passage, chapterId, chapterTitle, passageN
           <StaticBlock src={src} rev={rev} id={`${id}-g`} className="flex flex-wrap gap-1.5 mb-5" />
         )}
 
-        {/* 批注面板（默认隐藏；切到 annotation-on 时经 CSS 显示） */}
-        <div className="annotation-panel">
-          <AnnotationPanel chapterId={chapterId} passageId={id} />
-        </div>
+        {/* 批注面板（默认不挂载；首次切到 annotation-on 时加载，之后由 CSS 显示/隐藏） */}
+        <AnnotationSlot chapterId={chapterId} passageId={id} />
       </div>
     </section>
   );

@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { ScholarMarginNotesLazy, SelectionPopoverLazy } from "@/components/ChapterLazyIslands";
 import ChapterTOC from "@/components/ChapterTOC";
 import KeyboardNav from "@/components/KeyboardNav";
 import PassageView from "@/components/PassageView";
 import RecordReading from "@/components/RecordReading";
 import RelatedReadings from "@/components/RelatedReadings";
-import ScholarMarginNotes from "@/components/ScholarMarginNotes";
-import SelectionPopover from "@/components/SelectionPopover";
 import SentenceSyncController from "@/components/SentenceSyncController";
 import StaticBlock from "@/components/StaticBlock";
 import WordTooltipLayer from "@/components/WordTooltip";
@@ -89,13 +88,13 @@ export default async function ChapterPage({ params }: Props) {
     <>
       <StaticBlock src={src} rev={rev} id="ld" as="script" type="application/ld+json" ssrOnly />
       <ChapterTOC items={tocItems} />
-      <ScholarMarginNotes
+      <ScholarMarginNotesLazy
         chapterId={chapter.id}
         chapterTitle={chapter.title}
         passageCount={passageCount}
       />
       <RecordReading chapterId={chapter.id} chapterTitle={chapter.title} />
-      <SelectionPopover chapterId={chapter.id} chapterTitle={chapter.title} />
+      <SelectionPopoverLazy chapterId={chapter.id} chapterTitle={chapter.title} />
       <SentenceSyncController />
       <WordTooltipLayer chapterId={chapter.id} />
 
@@ -109,7 +108,7 @@ export default async function ChapterPage({ params }: Props) {
             <div key={passage.id} id={`passage-${passage.id}`} className={idx >= 1 ? "cv-auto" : ""}>
               <div className={`flex items-center gap-3 mb-3 ${idx === 0 ? "mt-0" : "mt-10"}`}>
                 <span className="text-xs font-medium text-[var(--text-muted)] tracking-[0.08em]">
-                  第{idx + 1}节
+                  {`第${idx + 1}节`}
                 </span>
                 <div className="flex-1 h-px bg-[var(--border-light)]" />
               </div>
