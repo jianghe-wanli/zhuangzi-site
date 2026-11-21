@@ -15,6 +15,7 @@
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm run lint && node scripts/validate-data.mjs && npm run test",
     "budget": "node scripts/check-budget.mjs",
+    "smoke": "node scripts/smoke.mjs",
     "check:output": "node scripts/check-output.mjs",
     "deploy": "npm run build && node scripts/check-output.mjs && wrangler pages deploy out --project-name zhuangzi-site",
     "clean": "node -e \"for (const d of ['.next','out','.cache']) require('node:fs').rmSync(d,{recursive:true,force:true})\""

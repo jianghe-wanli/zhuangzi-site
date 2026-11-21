@@ -83,6 +83,9 @@ jobs:
         run: node scripts/check-output.mjs
       - name: 章节页回归断言
         run: node scripts/check-passage-regression.mjs
+      # 真实 Chrome（Runner 自带）打开产物：无控制台报错 / 无 CSP 违规 / 客户端路由 / SW 离线回放
+      - name: 浏览器冒烟
+        run: npm run smoke
       - uses: actions/upload-artifact@v6
         with:
           name: out
@@ -121,7 +124,10 @@ jobs:
             http://localhost:4173/chapters/01-xiaoyao-you/
             http://localhost:4173/concepts/xiaoyao/
           runs: 3
-          budgetPath: ./.github/lighthouse-budget.json
+          # 体积/时间预算与分类得分断言合在一个文件里（LHCI 的 budgetsFile 与 assertions 互斥）。
+          # 得分只设宽松下限：无障碍/SEO ≥ 0.95、最佳实践 ≥ 0.9 失败；性能 < 0.6 仅警告。
+          # 计时类取 3 次里最好的一次，避免 Runner 抖动误报。
+          configPath: ./.github/lighthouserc.json
           uploadArtifacts: true
           temporaryPublicStorage: true
 
