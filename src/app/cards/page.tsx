@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 
+import quotesData from "@/data/quotes.json";
 import { buildPageMetadata } from "@/lib/site";
 
-import CardMaker from "./CardMaker";
+import CardMaker, { type Quote } from "./CardMaker";
 
 export const metadata: Metadata = buildPageMetadata({
   title: "名言卡片",
@@ -12,6 +13,17 @@ export const metadata: Metadata = buildPageMetadata({
   index: false,
 });
 
+// 只把笺纸用到的字段传给客户端岛（不带译文与用法说明）
+const quotes: Quote[] = quotesData.quotes.map((q) => ({
+  id: q.id,
+  text: q.text,
+  chapter: q.chapter,
+  chapterId: q.chapterId,
+  passageId: q.passageId,
+  theme: q.theme,
+  explanation: q.explanation,
+}));
+
 export default function CardsPage() {
-  return <CardMaker />;
+  return <CardMaker quotes={quotes} />;
 }

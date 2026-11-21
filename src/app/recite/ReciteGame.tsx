@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import quotesData from "@/data/quotes.json";
 
-interface Quote {
+export interface Quote {
   id: string;
   text: string;
   chapter: string;
@@ -22,7 +21,6 @@ interface Stats {
 }
 
 const STATS_KEY = "recite_stats";
-const THEMES = ["全部", ...new Set(quotesData.quotes.map((q) => q.theme))];
 const HAN = /[\u4E00-\u9FFF]/;
 
 /** Fisher–Yates 洗牌（sort(() => Math.random() - 0.5) 的结果并不均匀） */
@@ -51,7 +49,8 @@ function pickBlanks(text: string): number[] {
  * 从 44 条名句中随机取句，按字数挖 2–6 个空，逐空填写后批改；
  * 候选字区展示本句全部汉字（乱序）模拟宋代木活字点选。统计存 localStorage。
  */
-export default function ReciteGame() {
+export default function ReciteGame({ quotes }: { quotes: Quote[] }) {
+  const THEMES = useMemo(() => ["全部", ...new Set(quotes.map((q) => q.theme))], [quotes]);
   const [theme, setTheme] = useState("全部");
   const [queue, setQueue] = useState<string[]>([]);
   const [current, setCurrent] = useState<Quote | null>(null);
@@ -119,20 +118,20 @@ export default function ReciteGame() {
   const next = useCallback(() => {
     if (queue.length > 0) {
       const [head, ...rest] = queue;
-      const q = quotesData.quotes.find((x) => x.id === head);
+      const q = quotes.find((x) => x.id === head);
       setQueue(rest);
       if (q) startQuote(q);
       return;
     }
     // 队列耗尽 → 按主题重洗
-    const pool = quotesData.quotes.filter(
+    const pool = quotes.filter(
       (q) => theme === "全部" || q.theme === theme
     );
     const shuffled = shuffle(pool);
     const first = shuffled.shift();
     setQueue(shuffled.map((q) => q.id));
     if (first) startQuote(first);
-  }, [queue, theme, startQuote]);
+  }, [queue, theme, startQuote, quotes]);
 
   // 首次进入自动出题（changeTheme 置空 current 后亦由此触发重洗）
   useEffect(() => {
@@ -199,16 +198,7 @@ export default function ReciteGame() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="seal-char-lg" aria-hidden="true">誦</span>
-        <h1 className="text-2xl sm:text-3xl font-serif font-bold tracking-wide">
-          名句背诵
-        </h1>
-      </div>
-      <p className="text-sm text-[var(--text-secondary)] mb-6">
-        宋刻活字点选，挖空填字，把千古名句刻进心坎
-      </p>
+    <>
 
       {/* 统计条 */}
       <div
@@ -396,6 +386,6 @@ export default function ReciteGame() {
           生成名句卡片
         </Link>
       </p>
-    </div>
+    </>
   );
 }

@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useTheme } from "@/components/ThemeProvider";
-import quotesData from "@/data/quotes.json";
 
-interface Quote {
+export interface Quote {
   id: string;
   text: string;
   chapter: string;
@@ -139,7 +138,7 @@ function drawZenCircle(
   ctx.restore();
 }
 
-export default function CardMaker() {
+export default function CardMaker({ quotes }: { quotes: Quote[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [selectedPaperStyle, setSelectedPaperStyle] = useState<PaperStyleId | null>(null);
@@ -160,8 +159,7 @@ export default function CardMaker() {
   const paperStyle = selectedPaperStyle ?? defaultPaperStyle;
 
   const pickRandom = () => {
-    const all = (quotesData as { quotes: Quote[] }).quotes;
-    const item = all[Math.floor(Math.random() * all.length)] ?? null;
+    const item = quotes[Math.floor(Math.random() * quotes.length)] ?? null;
     setQuote(item);
     setIsCustomMode(false);
   };
@@ -194,8 +192,9 @@ export default function CardMaker() {
       }
     }
 
-     
     pickRandom();
+    // 仅挂载时执行一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleApplyCustom = () => {
@@ -268,7 +267,9 @@ export default function CardMaker() {
         canvas.width = Math.round(logicalW * dpr);
         canvas.height = Math.round(logicalH * dpr);
         canvas.style.width = `${logicalW}px`;
-        canvas.style.height = `${logicalH}px`;
+        // 高度随宽度等比缩放：窄屏下 max-w-full 收窄宽度时不再把笺纸压扁
+        canvas.style.height = "auto";
+        canvas.style.aspectRatio = `${logicalW} / ${logicalH}`;
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
@@ -343,7 +344,9 @@ export default function CardMaker() {
         canvas.width = Math.round(logicalW * dpr);
         canvas.height = Math.round(logicalH * dpr);
         canvas.style.width = `${logicalW}px`;
-        canvas.style.height = `${logicalH}px`;
+        // 高度随宽度等比缩放：窄屏下 max-w-full 收窄宽度时不再把笺纸压扁
+        canvas.style.height = "auto";
+        canvas.style.aspectRatio = `${logicalW} / ${logicalH}`;
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
@@ -654,6 +657,10 @@ export default function CardMaker() {
       <div className="flex justify-center p-4 md:p-8 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border-color)] overflow-x-auto shadow-inner">
         <canvas
           ref={canvasRef}
+          // 首屏先按横排最小尺寸占位，绘制完成前后不推挤下方内容
+          width={620}
+          height={340}
+          style={{ width: 620, height: "auto", aspectRatio: "620 / 340" }}
           role="img"
           aria-label={quote ? `金句笺纸：${quote.text} ——《庄子 · ${quote.chapter}》` : "金句笺纸"}
           className="rounded-lg shadow-lg border border-black/10 max-w-full transition-transform"
