@@ -8,7 +8,25 @@ export interface DailySnippet {
   chapterTitle: string;
   passageNum: number;
   original: string;
-  translation: string;
+}
+
+/** 译文按需加载的地址（src/app/daily-translations.json/route.ts 构建期生成） */
+const TRANSLATIONS_URL = "/daily-translations.json";
+
+// 模块级缓存：同一会话内只取一次（悬停预热与点击共用同一个 Promise）
+let translationsPromise: Promise<string[]> | null = null;
+
+function loadTranslations(): Promise<string[]> {
+  translationsPromise ??= fetch(TRANSLATIONS_URL)
+    .then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json() as Promise<string[]>;
+    })
+    .catch((err) => {
+      translationsPromise = null; // 失败不缓存，允许重试
+      throw err;
+    });
+  return translationsPromise;
 }
 
 function todaySeed(now: Date): number {
@@ -28,6 +46,22 @@ export default function DailyPassage({ pool }: { pool: DailySnippet[] }) {
   const [idx, setIdx] = useState(0);
   const [dateLabel, setDateLabel] = useState("");
   const [showTranslation, setShowTranslation] = useState(false);
+  const [translations, setTranslations] = useState<string[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  // 悬停 / 聚焦 / 触摸即预热，点击时译文通常已就绪
+  const prewarm = () => {
+    loadTranslations().then(setTranslations, () => {});
+  };
+
+  const toggleTranslation = () => {
+    const next = !showTranslation;
+    setShowTranslation(next);
+    if (next && !translations) {
+      setLoadFailed(false);
+      loadTranslations().then(setTranslations, () => setLoadFailed(true));
+    }
+  };
 
   useEffect(() => {
     if (pool.length === 0) return;
@@ -100,9 +134,13 @@ export default function DailyPassage({ pool }: { pool: DailySnippet[] }) {
               </blockquote>
 
               {showTranslation && (
-                <div className="mt-4 p-3.5 sm:p-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-light)]">
+                <div
+                  id="daily-translation"
+                  aria-live="polite"
+                  className="mt-4 p-3.5 sm:p-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-light)]"
+                >
                   <p className="text-xs sm:text-sm text-[var(--text-secondary)] italic leading-relaxed">
-                    {daily.translation}
+                    {translations?.[idx] ?? (loadFailed ? "译文加载失败，请检查网络后重试。" : "译文载入中…")}
                   </p>
                 </div>
               )}
@@ -110,7 +148,13 @@ export default function DailyPassage({ pool }: { pool: DailySnippet[] }) {
               {/* 底部操作栏：响应式换行排布 */}
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
                 <button
-                  onClick={() => setShowTranslation(!showTranslation)}
+                  type="button"
+                  onClick={toggleTranslation}
+                  onPointerEnter={prewarm}
+                  onFocus={prewarm}
+                  onTouchStart={prewarm}
+                  aria-expanded={showTranslation}
+                  aria-controls="daily-translation"
                   className="text-xs font-medium text-[var(--text-accent)] hover:text-[var(--color-accent-deep)] transition-colors"
                 >
                   {showTranslation ? "收起译文" : "查看白话译文"}
@@ -121,7 +165,7 @@ export default function DailyPassage({ pool }: { pool: DailySnippet[] }) {
                   className="text-xs text-[var(--text-muted)] hover:text-[var(--text-accent)] transition-colors flex items-center gap-1 shrink-0"
                 >
                   <span>{daily.chapterTitle}{pNum > 0 ? ` · 第${pNum}节` : ""} · 阅读全文</span>
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <svg className="w-3 h-3" fill="none" aria-hidden="true" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                   </svg>
                 </Link>
