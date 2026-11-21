@@ -41,11 +41,25 @@ mkdirSync(join(OUT_DIR, "kaoju"), { recursive: true });
 
 let tBytes = 0;
 let kBytes = 0;
+// 搜索索引（精简版）：只含检索与结果卡片用到的字段，避免首次搜索下载全量篇章数据
+const searchIndex = [];
 
 for (const file of chapterFiles) {
   const chapterId = file.replace(/\.json$/, "");
   const key = chapterId.split("-")[0];
   const chapter = readJson(join("chapters", file));
+
+  searchIndex.push({
+    id: chapter.id,
+    title: chapter.title,
+    category: chapter.category,
+    passages: (chapter.passages ?? []).map((p) => ({
+      id: p.id,
+      o: p.original,
+      t: p.translation,
+      ...(p.concepts?.length ? { c: p.concepts } : {}),
+    })),
+  });
 
   // 译本：仅保留 passageId → 全部版本（含默认白话，作为对照基准）
   const translations = {};
@@ -82,6 +96,10 @@ for (const file of chapterFiles) {
   writeFileSync(join(OUT_DIR, "kaoju", `${chapterId}.json`), kJson);
   kBytes += kJson.length;
 }
+
+const sJson = JSON.stringify(searchIndex);
+writeFileSync(join(OUT_DIR, "search-index.json"), sJson);
+console.log(`[gen-lazy-data] 已生成搜索索引 search-index.json(${(sJson.length / 1024).toFixed(0)}KB)`);
 
 console.log(
   `[gen-lazy-data] 已生成 ${chapterFiles.length} 篇译本(${(tBytes / 1024).toFixed(0)}KB) + 考据(${(kBytes / 1024).toFixed(0)}KB) 懒加载数据 → public/data/`

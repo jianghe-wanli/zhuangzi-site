@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 
 import MapWrapper from "@/components/MapWrapper";
+import { breadcrumbJsonLd } from "@/lib/breadcrumb-jsonld";
 import { buildPageMetadata } from "@/lib/site";
+
+import MapFallback from "./MapFallback";
 
 export const metadata: Metadata = buildPageMetadata({
   title: "庄子地理",
@@ -13,6 +16,10 @@ export const metadata: Metadata = buildPageMetadata({
 export default function MapPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: breadcrumbJsonLd("庄子地理", "/map") }}
+      />
       <div className="text-center mb-8">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-serif bg-[var(--text-accent)]/10 text-[var(--text-accent)] mb-3">
           <span className="seal-char" aria-hidden="true">輿</span>
@@ -27,7 +34,7 @@ export default function MapPage() {
         </p>
         <div className="ink-divider max-w-xs mx-auto mt-4" />
       </div>
-      <MapWrapper />
+      <MapWrapper fallback={<MapFallback />} />
     </div>
   );
 }

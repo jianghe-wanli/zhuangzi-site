@@ -1,8 +1,9 @@
-"use client";
-
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import routesData from "@/data/reading-routes.json";
+import { chapterTitles } from "@/lib/chapter-lookup";
+import { buildPageMetadata, canonicalUrl, SITE_NAME, SITE_URL } from "@/lib/site";
 
 interface Route {
   id: string;
@@ -12,24 +13,53 @@ interface Route {
   color: string;
 }
 
-const chapterNames: Record<string, string> = {
-  "01-xiaoyao-you": "逍遥游", "02-qiwu-lun": "齐物论", "03-yangsheng-zhu": "养生主",
-  "04-renjian-shi": "人间世", "05-dechong-fu": "德充符", "06-dazong-shi": "大宗师",
-  "07-yingdi-wang": "应帝王", "08-pianmu": "骈拇", "09-mati": "马蹄",
-  "10-quqie": "胠箧", "11-zaiyou": "在宥", "12-tiandi": "天地", "13-tiandao": "天道",
-  "14-tianyun": "天运", "15-keyi": "刻意", "16-shanxing": "缮性", "17-qiushui": "秋水",
-  "18-zhile": "至乐", "19-dasheng": "达生", "20-shanmu": "山木", "21-tianzifang": "田子方",
-  "22-zhibeiyou": "知北游", "23-gengsangchu": "庚桑楚", "24-xuwugui": "徐无鬼",
-  "25-zeyang": "则阳", "26-waiwu": "外物", "27-yuyan": "寓言", "28-rangwang": "让王",
-  "29-daozhi": "盗跖", "30-shuojian": "说剑", "31-yufu": "渔父", "32-lieyukou": "列御寇",
-  "33-tianxia": "天下",
+export const metadata: Metadata = buildPageMetadata({
+  title: "主题阅读路线",
+  description:
+    "按主题串联的《庄子》引导式阅读路线 — 从逍遥自由、齐物相对、养生处世到生死超越，为不同关切提供成体系的篇章次第。",
+  path: "/reading-routes",
+});
+
+const routes = (routesData as { routes: Route[] }).routes;
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "CollectionPage",
+      "@id": `${canonicalUrl("/reading-routes")}#collection`,
+      name: `主题阅读路线 — ${SITE_NAME}`,
+      inLanguage: "zh-Hans",
+      url: canonicalUrl("/reading-routes"),
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      mainEntity: {
+        "@type": "ItemList",
+        numberOfItems: routes.length,
+        itemListElement: routes.map((r, i) => ({
+          "@type": "ListItem",
+          position: i + 1,
+          name: r.title,
+          description: r.description,
+        })),
+      },
+    },
+    {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "首页", item: canonicalUrl("/") },
+        { "@type": "ListItem", position: 2, name: "主题阅读路线", item: canonicalUrl("/reading-routes") },
+      ],
+    },
+  ],
 };
 
 export default function ReadingRoutesPage() {
-  const routes = (routesData as { routes: Route[] }).routes;
-
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* Header */}
       <div className="text-center mb-14">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.04em] text-[var(--text-primary)] mb-3">
@@ -49,6 +79,7 @@ export default function ReadingRoutesPage() {
           >
             {/* Color accent bar */}
             <div
+              aria-hidden="true"
               className="w-10 h-1 rounded-full mb-1"
               style={{ backgroundColor: r.color }}
             />
@@ -65,7 +96,7 @@ export default function ReadingRoutesPage() {
                   href={`/chapters/${ch}`}
                   className="text-xs px-2 py-0.5 rounded-full border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-accent)] hover:border-[var(--text-accent)]/40 hover:bg-[var(--hover-bg)] transition-all"
                 >
-                  {chapterNames[ch] || ch}
+                  {chapterTitles[ch] || ch}
                 </Link>
               ))}
             </div>

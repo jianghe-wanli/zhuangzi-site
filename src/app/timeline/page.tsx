@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import Timeline from "@/components/Timeline";
+import { breadcrumbJsonLd } from "@/lib/breadcrumb-jsonld";
 import { buildPageMetadata } from "@/lib/site";
 
 export const metadata: Metadata = buildPageMetadata({
@@ -13,6 +14,10 @@ export const metadata: Metadata = buildPageMetadata({
 export default function TimelinePage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: breadcrumbJsonLd("时间线", "/timeline") }}
+      />
       <div className="text-center mb-14">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.04em] text-[var(--text-primary)] mb-3">
           庄子时间线
@@ -22,6 +27,9 @@ export default function TimelinePage() {
         </p>
         <div className="ink-divider" />
       </div>
+      <noscript>
+        <style>{"[data-tl-desc].hidden{display:block}"}</style>
+      </noscript>
       <Timeline />
     </div>
   );

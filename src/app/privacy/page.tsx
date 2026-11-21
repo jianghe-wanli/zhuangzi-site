@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { breadcrumbJsonLd } from "@/lib/breadcrumb-jsonld";
 import { buildPageMetadata, CONTENT_LAST_MODIFIED } from "@/lib/site";
 
 export const metadata: Metadata = buildPageMetadata({
@@ -42,6 +43,10 @@ const THIRD_PARTIES = [
 export default function PrivacyPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: breadcrumbJsonLd("隐私说明", "/privacy") }}
+      />
       <div className="text-center mb-12">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.04em] text-[var(--text-primary)] mb-3">
           隐私说明
