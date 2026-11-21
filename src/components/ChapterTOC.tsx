@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { subscribeCurrentPassage } from "@/lib/passage-dom";
+
 interface TocItem {
   id: string;
   label: string;
@@ -27,26 +29,8 @@ export default function ChapterTOC({ items }: ChapterTOCProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
-  // Track which passage is currently in view
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveId(entry.target.id);
-          }
-        }
-      },
-      { rootMargin: "-20% 0px -60% 0px", threshold: 0 }
-    );
-
-    items.forEach((p) => {
-      const el = document.getElementById(`passage-${p.id}`);
-      if (el) observer.observe(el);
-    });
-
-    return () => observer.disconnect();
-  }, [items]);
+  // 当前阅读到的段落（与 RecordReading / ScholarMarginNotes 共用同一个 IntersectionObserver）
+  useEffect(() => subscribeCurrentPassage((el) => setActiveId(el.id)), [items]);
 
   if (items.length <= 1) return null;
 
