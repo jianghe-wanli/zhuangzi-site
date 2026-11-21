@@ -25,7 +25,9 @@ const LIMITS = {
   maxCharsPerMessage: 8_000,
   maxTotalChars: 40_000,
   maxTokensCap: 2_048,
-  upstreamTimeoutMs: 60_000,
+  upstreamTimeoutMs: 60_000, // 等上游响应头（非流式：含读完正文）
+  streamIdleTimeoutMs: 30_000, // 流式：相邻两块之间的最长静默
+  streamMaxDurationMs: 300_000, // 流式：整条流的最长时长
 };
 
 // ── 限流 ──
@@ -229,9 +231,26 @@ export async function onRequest(context) {
     stream: stream === true,
   };
 
-  // 上游超时保护：Workers 请求本身有时限，但显式 abort 能让我们回可读错误
+  // 上游中止的三个来源，共用一个 controller：
+  //   1) 超时（等响应头 / 流式静默 / 流式总时长）
+  //   2) 客户端断开（request.signal）—— 否则上游会继续生成并计费到用户的 key 上
+  //   3) 下游取消读取（ReadableStream.cancel）
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LIMITS.upstreamTimeoutMs);
+  let timedOut = false;
+  const abortForTimeout = () => {
+    timedOut = true;
+    controller.abort();
+  };
+  const onClientAbort = () => controller.abort();
+  const clientSignal = request.signal;
+  if (clientSignal?.aborted) return jsonError("请求已取消", 499);
+  let timer = setTimeout(abortForTimeout, LIMITS.upstreamTimeoutMs);
+  clientSignal?.addEventListener("abort", onClientAbort, { once: true });
+  const cleanup = () => {
+    clearTimeout(timer);
+    clientSignal?.removeEventListener("abort", onClientAbort);
+  };
+  let handedOff = false; // 流式响应交出去之后，由流自己负责 cleanup
 
   try {
     const response = await fetch(DEEPSEEK_URL, {
@@ -264,7 +283,43 @@ export async function onRequest(context) {
 
     // ── 流式：直接转发 SSE ──
     if (payload.stream) {
-      return new Response(response.body, {
+      if (!response.body) return jsonError("上游服务暂时不可用", 502);
+      const reader = response.body.getReader();
+      const deadline = Date.now() + LIMITS.streamMaxDurationMs;
+      handedOff = true;
+      // 用 pull 而不是直接转交 response.body：
+      // - 背压：下游读一块才向上游要一块，慢客户端不会让数据在函数里堆积
+      // - 每块重置静默计时；超时 / 客户端断开都会中止上游
+      const body = new ReadableStream({
+        async pull(streamController) {
+          clearTimeout(timer);
+          const budget = Math.min(LIMITS.streamIdleTimeoutMs, deadline - Date.now());
+          if (budget <= 0) {
+            abortForTimeout();
+          } else {
+            timer = setTimeout(abortForTimeout, budget);
+          }
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              cleanup();
+              streamController.close();
+              return;
+            }
+            streamController.enqueue(value);
+          } catch {
+            cleanup();
+            // 不透传上游错误细节；流被异常终止，客户端按网络错误处理
+            streamController.error(new Error(timedOut ? "upstream timeout" : "upstream aborted"));
+          }
+        },
+        cancel(reason) {
+          cleanup();
+          controller.abort();
+          return reader.cancel(reason).catch(() => undefined);
+        },
+      });
+      return new Response(body, {
         headers: {
           "Content-Type": "text/event-stream; charset=utf-8",
           ...BASE_HEADERS,
@@ -278,10 +333,12 @@ export async function onRequest(context) {
     const content = data?.choices?.[0]?.message?.content || "吾默然。";
 
     return json({ content });
-  } catch (err) {
-    if (err?.name === "AbortError") return jsonError("上游响应超时", 504);
+  } catch {
+    if (timedOut) return jsonError("上游响应超时", 504);
+    // 客户端已断开：响应没人收，状态码只用于日志（499 = client closed request）
+    if (clientSignal?.aborted) return jsonError("请求已取消", 499);
     return jsonError("服务暂时不可用", 502);
   } finally {
-    clearTimeout(timer);
+    if (!handedOff) cleanup();
   }
 }

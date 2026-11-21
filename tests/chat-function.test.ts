@@ -13,14 +13,16 @@ interface UpstreamCall {
   url: string;
   headers: Headers;
   body: Record<string, unknown>;
+  signal: AbortSignal;
 }
 
 let upstreamCalls: UpstreamCall[];
-let upstream: () => Response | Promise<Response>;
+let upstream: (signal: AbortSignal) => Response | Promise<Response>;
 let rateStore: Map<string, Response>;
 
-function post(body: unknown, headers: Record<string, string> = {}, raw?: BodyInit) {
+function post(body: unknown, headers: Record<string, string> = {}, raw?: BodyInit, signal?: AbortSignal) {
   return new Request(`${ORIGIN}/api/chat`, {
+    ...(signal ? { signal } : {}),
     method: "POST",
     headers: { "content-type": "application/json", origin: ORIGIN, ...headers },
     body: raw ?? JSON.stringify(body),
@@ -49,8 +51,9 @@ beforeEach(() => {
       url,
       headers: new Headers(init.headers),
       body: JSON.parse(String(init.body)) as Record<string, unknown>,
+      signal: init.signal as AbortSignal,
     });
-    return upstream();
+    return upstream(init.signal as AbortSignal);
   });
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -231,11 +234,7 @@ describe("/api/chat 转发", () => {
     }
   });
 
-  it("上游超时 → 504；网络异常 / 非 JSON → 502", async () => {
-    upstream = () => {
-      throw Object.assign(new Error("aborted"), { name: "AbortError" });
-    };
-    expect((await call(post(validBody()))).status).toBe(504);
+  it("网络异常 / 非 JSON → 502（超时的 504 见下方「中止、超时与背压」）", async () => {
     upstream = () => {
       throw new TypeError("network");
     };
@@ -247,5 +246,143 @@ describe("/api/chat 转发", () => {
   it("上游返回空内容时给兜底回答", async () => {
     upstream = () => Response.json({ choices: [] });
     expect(await (await call(post(validBody()))).json()).toEqual({ content: "吾默然。" });
+  });
+});
+
+describe("/api/chat 中止、超时与背压", () => {
+  /** 一个受测试控制的上游 SSE 流：记录被 pull 的次数与是否被取消 */
+  function controllableUpstream() {
+    const state = { pulls: 0, cancelled: false, push: (_chunk: string) => {}, end: () => {} };
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>(
+      {
+        start(c) {
+          state.push = (chunk) => c.enqueue(encoder.encode(chunk));
+          state.end = () => c.close();
+        },
+        pull() {
+          state.pulls++;
+        },
+        cancel() {
+          state.cancelled = true;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    return { state, response: new Response(body, { status: 200 }) };
+  }
+  /** 永不返回、但会响应 abort 的上游 */
+  const hangingUpstream = (signal: AbortSignal) =>
+    new Promise<Response>((_, reject) => {
+      signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("请求到达时客户端已断开 → 不调用上游", async () => {
+    const res = await call(post(validBody(), {}, undefined, AbortSignal.abort()));
+    expect(res.status).toBe(499);
+    expect(upstreamCalls).toHaveLength(0);
+  });
+
+  it("等待上游期间客户端断开 → 中止上游请求", async () => {
+    const client = new AbortController();
+    upstream = hangingUpstream;
+    const pending = call(post(validBody(), {}, undefined, client.signal));
+    await vi.waitFor(() => expect(upstreamCalls).toHaveLength(1));
+    expect(upstreamCalls[0]?.signal.aborted).toBe(false);
+    client.abort();
+    const res = await pending;
+    expect(upstreamCalls[0]?.signal.aborted).toBe(true);
+    expect(res.status).toBe(499);
+  });
+
+  it("上游 60 秒不给响应头 → 504，且上游被中止", async () => {
+    vi.useFakeTimers();
+    upstream = hangingUpstream;
+    const pending = call(post(validBody()));
+    await vi.advanceTimersByTimeAsync(60_000);
+    const res = await pending;
+    expect(res.status).toBe(504);
+    expect(await errorOf(res)).toBe("上游响应超时");
+    expect(upstreamCalls[0]?.signal.aborted).toBe(true);
+  });
+
+  it("流式：下游取消读取 → 取消上游流并中止上游请求", async () => {
+    const { state, response } = controllableUpstream();
+    upstream = () => response;
+    const res = await call(post(validBody({ stream: true })));
+    const reader = res.body!.getReader();
+    state.push("data: 1\n\n");
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe("data: 1\n\n");
+    await reader.cancel();
+    expect(state.cancelled).toBe(true);
+    expect(upstreamCalls[0]?.signal.aborted).toBe(true);
+  });
+
+  it("流式：流进行中客户端断开 → 中止上游请求", async () => {
+    const client = new AbortController();
+    const { response } = controllableUpstream();
+    upstream = () => response;
+    await call(post(validBody({ stream: true }), {}, undefined, client.signal));
+    client.abort();
+    expect(upstreamCalls[0]?.signal.aborted).toBe(true);
+  });
+
+  it("流式背压：下游不读，就不向上游多要数据", async () => {
+    const { state, response } = controllableUpstream();
+    upstream = () => response;
+    const res = await call(post(validBody({ stream: true })));
+    await new Promise((r) => setTimeout(r, 20));
+    const idlePulls = state.pulls;
+    expect(idlePulls).toBeLessThanOrEqual(1); // 至多预取一块
+    await new Promise((r) => setTimeout(r, 20));
+    expect(state.pulls).toBe(idlePulls); // 没人读，不再增长
+
+    const reader = res.body!.getReader();
+    for (const chunk of ["a", "b", "c"]) {
+      state.push(chunk);
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe(chunk);
+    }
+    state.end();
+    expect((await reader.read()).done).toBe(true);
+    expect(upstreamCalls[0]?.signal.aborted).toBe(false); // 正常结束不触发中止
+  });
+
+  it("流式：相邻两块静默超过 30 秒 → 中止上游并终止流；每块重置计时", async () => {
+    vi.useFakeTimers();
+    const { state, response } = controllableUpstream();
+    upstream = (signal) => {
+      // 真实 fetch 在 abort 时会让 body 读取失败，这里手动模拟
+      signal.addEventListener("abort", () => void response.body!.cancel().catch(() => undefined));
+      return response;
+    };
+    const res = await call(post(validBody({ stream: true })));
+    const reader = res.body!.getReader();
+
+    state.push("x");
+    await reader.read();
+    await vi.advanceTimersByTimeAsync(29_000);
+    state.push("y"); // 29 秒后来了一块：计时重置
+    await reader.read();
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(upstreamCalls[0]?.signal.aborted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(upstreamCalls[0]?.signal.aborted).toBe(true);
+  });
+
+  it("流式：总时长超过 5 分钟 → 即使一直有数据也中止", async () => {
+    vi.useFakeTimers();
+    const { state, response } = controllableUpstream();
+    upstream = () => response;
+    const res = await call(post(validBody({ stream: true })));
+    const reader = res.body!.getReader();
+    for (let i = 0; i < 31; i++) {
+      state.push("x");
+      await reader.read();
+      await vi.advanceTimersByTimeAsync(10_000);
+    }
+    expect(upstreamCalls[0]?.signal.aborted).toBe(true);
   });
 });
