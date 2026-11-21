@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ORIGIN = "https://zhuangzi.test";
 const SW_SOURCE = readFileSync(join(process.cwd(), "public", "sw.js"), "utf8");
@@ -386,6 +386,119 @@ describe("Service Worker（public/sw.js）", () => {
     release();
     await Promise.all(pending);
     expect(immutable.entries.size).toBe(1);
+  });
+
+  it("带内容哈希的字体分片进 immutable 缓存，发版（activate）后仍在；未带哈希的不进", async () => {
+    h.setFetch(async () => new Response("font", { status: 200 }));
+    await h.dispatchFetch("/fonts/slices/zhuangzi-cls-07.1a2b3c4d.woff2");
+    await h.dispatchFetch("/fonts/slices/zhuangzi-cls-07.woff2");
+    await h.dispatchFetch("/fonts/other.deadbeef.woff2"); // 不在 slices/ 下：不认
+    expect(await cacheUrls(h, "zhuangzi-immutable")).toEqual(["/fonts/slices/zhuangzi-cls-07.1a2b3c4d.woff2"]);
+    expect((await cacheUrls(h, "zhuangzi-static-")).sort()).toEqual([
+      "/fonts/other.deadbeef.woff2",
+      "/fonts/slices/zhuangzi-cls-07.woff2",
+    ]);
+    await h.caches.open("zhuangzi-static-OLDBUILD");
+    await h.dispatchLifecycle("activate");
+    expect(await cacheUrls(h, "zhuangzi-immutable")).toHaveLength(1);
+    h.setFetch(offline);
+    expect(await (await h.dispatchFetch("/fonts/slices/zhuangzi-cls-07.1a2b3c4d.woff2"))?.text()).toBe("font");
+  });
+
+  describe("按需 JSON（blocks.json / 每日译文 / 搜索索引）", () => {
+    const json = (v: unknown) =>
+      new Response(JSON.stringify(v), { status: 200, headers: { "Content-Type": "application/json" } });
+
+    it("**/blocks.json：Network-First —— 在线永远拿新版本（不能旧块配新 RSC 载荷）", async () => {
+      h.setFetch(async () => json({ build: 1 }));
+      expect(await (await h.dispatchFetch("/chapters/01-xiaoyao-you/blocks.json"))?.json()).toEqual({ build: 1 });
+      h.setFetch(async () => json({ build: 2 }));
+      // SWR 在这里会先回 build 1
+      expect(await (await h.dispatchFetch("/chapters/01-xiaoyao-you/blocks.json"))?.json()).toEqual({ build: 2 });
+      expect(await cacheUrls(h, "zhuangzi-blocks-")).toEqual(["/chapters/01-xiaoyao-you/blocks.json"]);
+      expect(await cacheUrls(h, "zhuangzi-json-")).toEqual([]);
+    });
+
+    it("**/blocks.json：任意路由层级都按同一策略；离线回退缓存", async () => {
+      h.setFetch(async () => json({ ok: true }));
+      for (const p of ["/concepts/dao/blocks.json", "/fables/blocks.json", "/a/b/c/blocks.json"]) {
+        await h.dispatchFetch(p);
+      }
+      h.setFetch(offline);
+      for (const p of ["/concepts/dao/blocks.json", "/fables/blocks.json", "/a/b/c/blocks.json"]) {
+        expect(await (await h.dispatchFetch(p))?.json(), p).toEqual({ ok: true });
+      }
+      // 文件名只是以 blocks.json 结尾的不算
+      await h.dispatchFetch("/data/myblocks.json").catch(() => {});
+      expect(await cacheUrls(h, "zhuangzi-blocks-")).toHaveLength(3);
+    });
+
+    it("blocks.json 404（该路由没有静态块）不入缓存", async () => {
+      h.setFetch(async () => new Response("<html>404</html>", { status: 404 }));
+      expect((await h.dispatchFetch("/quotes/blocks.json"))?.status).toBe(404);
+      expect(await cacheUrls(h, "zhuangzi-blocks-")).toEqual([]);
+    });
+
+    it("离线且 blocks.json 未缓存 → 如实失败；页面 reload 后拿到缓存整页，不会刷新循环", async () => {
+      // 整页访问过（HTML 已缓存），但从未经客户端路由进入 → 没有 blocks.json 缓存
+      h.setFetch(async () => html("full-chapter-html"));
+      await h.dispatchFetch("/chapters/02-qiwu-lun/", { mode: "navigate" });
+      h.setFetch(offline);
+      // 客户端路由进入 → fetch blocks.json 失败（页面随即 location.reload()）
+      expect((await h.dispatchFetch("/chapters/02-qiwu-lun/blocks.json"))?.type).toBe("error");
+      // reload = 导航请求 → 缓存的整页 HTML（自带正文，不再请求 blocks.json）
+      const reloaded = await h.dispatchFetch("/chapters/02-qiwu-lun/", { mode: "navigate" });
+      expect(reloaded?.status).toBe(200);
+      expect(await reloaded?.text()).toBe("full-chapter-html");
+    });
+
+    it("离线、blocks.json 与整页都未缓存 → reload 落到 503 离线页（同样不循环）", async () => {
+      h.setFetch(async () => html("<title>离线</title>"));
+      await h.dispatchLifecycle("install");
+      h.setFetch(offline);
+      expect((await h.dispatchFetch("/concepts/wuwei/blocks.json"))?.type).toBe("error");
+      const reloaded = await h.dispatchFetch("/concepts/wuwei/", { mode: "navigate" });
+      expect(reloaded?.status).toBe(503);
+      expect(await reloaded?.text()).toContain("离线");
+    });
+
+    it("慢网：blocks.json 超过 4 秒未返回且有缓存 → 先用缓存，网络回来后更新缓存", async () => {
+      vi.useFakeTimers();
+      try {
+        h = createHarness(); // vm 上下文在创建时捕获 setTimeout，须在假时钟下重建
+        h.setFetch(async () => json({ build: 1 }));
+        await h.dispatchFetch("/chapters/03-yangsheng-zhu/blocks.json");
+        let release!: (r: Response) => void;
+        h.setFetch(() => new Promise<Response>((r) => (release = r)));
+        const pending = h.dispatchFetch("/chapters/03-yangsheng-zhu/blocks.json");
+        await vi.advanceTimersByTimeAsync(4100);
+        release(json({ build: 2 }));
+        expect(await (await pending)?.json()).toEqual({ build: 1 });
+      } finally {
+        vi.useRealTimers();
+      }
+      h.setFetch(offline);
+      expect(await (await h.dispatchFetch("/chapters/03-yangsheng-zhu/blocks.json"))?.json()).toEqual({ build: 2 });
+    });
+
+    it("/daily-translations.json 与 /data/search-index.json：SWR，离线可用，取不到如实失败", async () => {
+      h.setFetch(async () => json({ v: 1 }));
+      for (const p of ["/daily-translations.json", "/data/search-index.json"]) {
+        expect(await (await h.dispatchFetch(p))?.json()).toEqual({ v: 1 });
+      }
+      expect((await cacheUrls(h, "zhuangzi-json-")).sort()).toEqual([
+        "/daily-translations.json",
+        "/data/search-index.json",
+      ]);
+      h.setFetch(offline);
+      for (const p of ["/daily-translations.json", "/data/search-index.json"]) {
+        expect(await (await h.dispatchFetch(p))?.json()).toEqual({ v: 1 });
+      }
+      // 搜索索引取不到时页面会回退到全量 chunk，这里必须是失败而不是伪造的空 JSON
+      const fresh = createHarness();
+      fresh.setFetch(offline);
+      expect((await fresh.dispatchFetch("/data/search-index.json"))?.type).toBe("error");
+    });
   });
 
   it("SKIP_WAITING 消息触发 skipWaiting", () => {

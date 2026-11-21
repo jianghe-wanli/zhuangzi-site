@@ -58,8 +58,23 @@
 /*.woff2
   Cache-Control: public, max-age=604800, stale-while-revalidate=31536000
 
+# 字体分片文件名带内容哈希（zhuangzi-cls-NN.<hash>.woff2）→ 可以一年 immutable。
+# 先摘掉上面 /*.woff2 给的值，否则两条 Cache-Control 会被拼成一条。
+/fonts/slices/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+# JSON 数据文件名不带哈希。max-age=3600 的含义是「发版后最长一小时内，浏览器
+# 不问服务器直接用旧文件」：对 /data/**、搜索索引、每日译文可以接受
+# （内容只随发版变化，且各自有回退路径），换来一小时内零请求。
 /*.json
   Cache-Control: public, max-age=3600, must-revalidate
+
+# 页面正文静态块必须与同一次构建的 RSC 载荷配套，不能有「一小时旧窗口」：
+# 每次都向服务器校验（未变时是 304，无正文）。与 HTML / RSC 载荷的默认策略一致。
+/*/blocks.json
+  ! Cache-Control
+  Cache-Control: public, max-age=0, must-revalidate
 
 # OG 分享图会被第三方页面以 <img> 直接引用，放开 CORP（其余资源保持 same-origin）。
 # 先用 ! 摘掉 /* 区块继承的值，否则同名头会被逗号拼接成非法值。

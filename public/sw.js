@@ -4,8 +4,11 @@
 // 策略：
 //   /_next/static/*          → Cache-First，放进**不带版本号**的缓存（文件名即内容哈希，
 //                              跨部署仍然有效，不随发版清空）
-//   字体 / 图片               → Cache-First（文件名不带哈希，随版本号失效）
-//   *.json                   → Stale-While-Revalidate
+//   /fonts/slices/*.<hash>.woff2 → 同上（字体分片文件名带内容哈希）
+//   其余字体 / 图片           → Cache-First（文件名不带哈希，随版本号失效）
+//   **/blocks.json           → Network-First（页面正文静态块，必须与 RSC 载荷同版本；
+//                              慢网超时 / 离线回退缓存）
+//   其余 *.json              → Stale-While-Revalidate
 //   RSC 载荷（*.txt）         → Network-First，离线回退缓存（客户端导航离线可用）
 //   HTML 导航                → Network-First（慢网超时回退缓存）+ 离线页
 //
@@ -19,6 +22,7 @@ const CACHE_IMMUTABLE = "zhuangzi-immutable";
 const CACHE_STATIC = "zhuangzi-static-v1";
 const CACHE_PAGES = "zhuangzi-pages-v1";
 const CACHE_RSC = "zhuangzi-rsc-v1";
+const CACHE_BLOCKS = "zhuangzi-blocks-v1";
 const CACHE_JSON = "zhuangzi-json-v1";
 const CACHE_SHELL = "zhuangzi-shell-v1";
 
@@ -27,6 +31,7 @@ const CURRENT_CACHES = [
   CACHE_STATIC,
   CACHE_PAGES,
   CACHE_RSC,
+  CACHE_BLOCKS,
   CACHE_JSON,
   CACHE_SHELL,
 ];
@@ -41,6 +46,7 @@ const MAX_ENTRIES = {
   [CACHE_STATIC]: 120,
   [CACHE_PAGES]: 40,
   [CACHE_RSC]: 200,
+  [CACHE_BLOCKS]: 60,
   [CACHE_JSON]: 30,
 };
 
@@ -53,6 +59,10 @@ const PRECACHE_URLS = [OFFLINE_URL];
 
 // 慢网（lie-fi）下导航若超过此时长仍无响应、且本机有该页缓存，先用缓存。
 const NAV_TIMEOUT_MS = 4000;
+
+// 文件名带 8 位以上十六进制内容哈希的字体分片（zhuangzi-cls-07.1a2b3c4d.woff2）。
+// 只认带哈希的：未带哈希的字体仍走随版本失效的缓存，否则重新子集化后会一直用旧文件。
+const HASHED_FONT = /^\/fonts\/slices\/[^/]+\.[0-9a-f]{8,}\.woff2$/;
 
 // ── 工具 ──
 
@@ -170,16 +180,44 @@ async function staleWhileRevalidate(event, cacheName) {
   return network;
 }
 
-async function networkFirstRsc(event) {
+/**
+ * Network-First（数据类请求）：网络优先；超过 NAV_TIMEOUT_MS 且有缓存先给缓存；
+ * 网络失败回退缓存；都没有则**如实失败**。
+ *
+ * 用于 RSC 载荷与 blocks.json —— 两者都描述「某次构建的某个页面」，必须取同一版本，
+ * 所以不能用 SWR（旧块配新载荷）。如实失败很重要：
+ *   · RSC 取不到 → Next 路由器退回整页导航；
+ *   · blocks.json 取不到 → 页面 location.reload()；
+ * 两者最终都落到 networkFirstPage，由它给出缓存的整页 HTML 或 /offline/。
+ * 整页 HTML 自带全部正文、不再请求 blocks.json，因此不会形成刷新循环。
+ */
+async function networkFirstData(event, cacheName) {
   const { request } = event;
   const key = cacheKey(request);
-  try {
-    const response = await fetch(request);
-    event.waitUntil(putSafely(CACHE_RSC, key, request, response.clone()));
+
+  const network = fetch(request).then((response) => {
+    event.waitUntil(putSafely(cacheName, key, request, response.clone()));
     return response;
+  });
+
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(null), NAV_TIMEOUT_MS);
+  });
+
+  try {
+    const first = await Promise.race([network, timeout]);
+    if (first) return first;
+    const cached = await matchIn(cacheName, key);
+    if (cached) {
+      event.waitUntil(network.then(() => undefined, () => undefined));
+      return cached;
+    }
+    return await network;
   } catch {
-    // 取不到也没缓存 → 如实失败，Next 路由器会退回整页导航，再走下面的页面策略
-    return (await matchIn(CACHE_RSC, key)) || Response.error();
+    return (await matchIn(cacheName, key)) || Response.error();
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -276,13 +314,25 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 2) 字体与图片 → Cache-First，随版本失效
+  // 1b) 带内容哈希的字体分片 → 同样跨版本保留
+  if (HASHED_FONT.test(url.pathname)) {
+    event.respondWith(cacheFirst(event, CACHE_IMMUTABLE));
+    return;
+  }
+
+  // 2) 其余字体与图片 → Cache-First，随版本失效
   if (/\.(png|svg|ico|webp|avif|woff2?)$/.test(url.pathname)) {
     event.respondWith(cacheFirst(event, CACHE_STATIC));
     return;
   }
 
-  // 3) JSON 数据 → Stale-While-Revalidate
+  // 3a) 页面正文静态块 → Network-First（与 RSC 载荷同版本）
+  if (url.pathname.endsWith("/blocks.json")) {
+    event.respondWith(networkFirstData(event, CACHE_BLOCKS));
+    return;
+  }
+
+  // 3b) 其余 JSON 数据（/data/**、/daily-translations.json、搜索索引）→ Stale-While-Revalidate
   if (url.pathname.endsWith(".json")) {
     event.respondWith(staleWhileRevalidate(event, CACHE_JSON));
     return;
@@ -290,7 +340,7 @@ self.addEventListener("fetch", (event) => {
 
   // 4) RSC 载荷（客户端导航 / 预取）→ Network-First
   if (isRscRequest(request, url)) {
-    event.respondWith(networkFirstRsc(event));
+    event.respondWith(networkFirstData(event, CACHE_RSC));
     return;
   }
 
