@@ -1,52 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createElement, type MouseEvent, use, useEffect, useState } from "react";
+import { createElement, type MouseEvent, type SyntheticEvent, use, useEffect, useState } from "react";
 
-type Html = { __html: string };
-type Blocks = Record<string, string>;
+import { type Blocks, fetchBlocks, type Html, known, pending } from "@/lib/static-blocks-client";
 
 /** 与 src/lib/static-html.ts 的 STATIC_BLOCKS_KEY 相同（那边是 server-only，不能 import） */
 const REGISTRY_KEY = Symbol.for("zhuangzi.static-blocks");
 const EMPTY: Html = { __html: "" };
-
-/** 已知的块内容（水合时从 DOM 采集，或由 blocks.json 取回），键为 `${src}#${id}` */
-const known = new Map<string, Html>();
-const pending = new Map<string, Promise<Blocks>>();
 /** 经 blocks.json 取回后才挂载的页面，补一次锚点滚动（见下） */
 let hashHandledFor = "";
 
-function fetchBlocks(src: string, init?: RequestInit): Promise<Blocks> {
-  return fetch(src, init)
-    .then((r) => {
-      if (!r.ok) throw new Error(String(r.status));
-      return r.json() as Promise<Blocks>;
-    })
-    .then((blocks) => {
-      for (const [id, html] of Object.entries(blocks)) known.set(`${src}#${id}`, { __html: html });
-      return blocks;
-    });
-}
-
-/**
- * 预取某页的 blocks.json（悬停 / 触摸 / 聚焦 / 点击链接时由 StaticBlockPrefetch 调用），
- * 让正文与 RSC 载荷并行到达，而不是等 RSC 渲染出 StaticBlock 后才开始取。
- * 失败静默丢弃 —— 真正渲染时会重取。
- */
-export function prefetchBlocks(src: string): void {
-  if (pending.has(src)) return;
-  const p = fetchBlocks(src);
-  pending.set(src, p);
-  p.catch(() => {
-    if (pending.get(src) === p) pending.delete(src);
-  });
-}
-
-/** 站内路径 → 该页 blocks.json 的路径；不是静态块页面则返回 null */
-export function blocksSrcForPath(pathname: string): string | null {
-  const m = /^\/(chapters|concepts)(\/[^/]+)?\/?$/.exec(pathname);
-  return m ? `/${m[1]}${m[2] ?? ""}/blocks.json` : null;
-}
+/** 已交给 router.prefetch 的站内地址（整个会话内去重） */
+const prefetched = new Set<string>();
 
 const RELOAD_GUARD = "zhuangzi:sb-reload";
 /** 取回失败且已经整页重载过一次的 src：改为在页内给出提示，绝不再次重载 */
@@ -197,14 +163,29 @@ export default function StaticBlock({ src, id, as = "div", className, ssrOnly, t
     target?.scrollIntoView({ block: "start" });
   }, [fetched, src]);
 
+  /** 块内站内链接（普通 <a>）的地址；不是可接管的站内链接则返回 null */
+  const internalLink = (e: SyntheticEvent<HTMLElement>): string | null => {
+    const a = (e.target as Element).closest?.("a[href]");
+    if (!a || !e.currentTarget.contains(a) || a.hasAttribute("download") || a.getAttribute("target")) return null;
+    const href = a.getAttribute("href") ?? "";
+    return href.startsWith("/") && !href.startsWith("//") ? href : null;
+  };
+
   const onClick = (e: MouseEvent<HTMLElement>) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    const a = (e.target as Element).closest?.("a[href]");
-    if (!a || !e.currentTarget.contains(a) || a.hasAttribute("download") || a.getAttribute("target")) return;
-    const href = a.getAttribute("href") ?? "";
-    if (!href.startsWith("/") || href.startsWith("//")) return;
+    const href = internalLink(e);
+    if (!href) return;
     e.preventDefault();
     router.push(href);
+  };
+
+  // <Link> 自带的预取在普通 <a> 上没有：悬停 / 触摸 / 聚焦时预取目标页的 RSC 载荷
+  // （目标页的 blocks.json 由根布局的 StaticBlockPrefetch 同时预取）
+  const onIntent = (e: SyntheticEvent<HTMLElement>) => {
+    const href = internalLink(e);
+    if (!href || prefetched.has(href)) return;
+    prefetched.add(href);
+    router.prefetch(href);
   };
 
   if (html === ABSENT) return null;
@@ -216,5 +197,8 @@ export default function StaticBlock({ src, id, as = "div", className, ssrOnly, t
     suppressHydrationWarning: true,
     dangerouslySetInnerHTML: html,
     onClick: ssrOnly ? undefined : onClick,
+    onMouseOver: ssrOnly ? undefined : onIntent,
+    onTouchStart: ssrOnly ? undefined : onIntent,
+    onFocus: ssrOnly ? undefined : onIntent,
   });
 }

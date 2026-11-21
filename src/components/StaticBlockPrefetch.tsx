@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-import { blocksSrcForPath, prefetchBlocks } from "./StaticBlock";
+import { blocksSrcForPath, prefetchBlocks } from "@/lib/static-blocks-client";
 
 /**
  * 静态块预取（挂在根布局，全站生效，无 UI）。
