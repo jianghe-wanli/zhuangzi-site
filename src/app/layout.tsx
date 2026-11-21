@@ -184,7 +184,10 @@ export default function RootLayout({
         */}
         <Navigation />
         <ReadingProgress />
-        <main id="main-content" tabIndex={-1} className="flex-1 outline-none">{children}</main>
+        {/* min-h：主体至少占满导航以下的一屏，页脚初始必在首屏之外。
+            否则短页面（/search 等客户端渲染页）水合后内容长高，会把已在
+            视口内的页脚顶下去 —— Lighthouse 实测 /search CLS 0.089 全部来自页脚。 */}
+        <main id="main-content" tabIndex={-1} className="flex-1 min-h-[calc(100svh-3.5rem)] outline-none">{children}</main>
         <Footer />
         <ChatFab />
         <ShortcutsHelp />

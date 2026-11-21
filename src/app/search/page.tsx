@@ -80,17 +80,7 @@ function SearchContent() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-      <div className="text-center mb-10">
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.04em] text-[var(--text-primary)] mb-3">
-          全文搜索
-        </h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          搜索原文、译文与解读
-        </p>
-        <div className="ink-divider" />
-      </div>
-
+    <>
       <div className="mb-8 flex justify-center">
         <SearchBar compact initialValue={initialQuery} />
       </div>
@@ -143,20 +133,31 @@ function SearchContent() {
           </Link>
         ))}
       </div>
-    </div>
+    </>
   );
 }
 
 export default function SearchPage() {
+  // 页头在 Suspense 之外：useSearchParams 使 SearchContent 在静态导出下只能客户端渲染，
+  // 此前整页（含 h1）都要等水合后才出现，LCP 被推迟且页面高度跳变
   return (
-    <Suspense
-      fallback={
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
-          <p className="text-sm text-[var(--text-muted)] animate-pulse">正在加载搜索…</p>
-        </div>
-      }
-    >
-      <SearchContent />
-    </Suspense>
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+      <div className="text-center mb-10">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.04em] text-[var(--text-primary)] mb-3">
+          全文搜索
+        </h1>
+        <p className="text-sm text-[var(--text-secondary)]">
+          搜索原文、译文与解读
+        </p>
+        <div className="ink-divider" />
+      </div>
+      <Suspense
+        fallback={
+          <p className="text-center text-sm text-[var(--text-muted)] animate-pulse">正在加载搜索…</p>
+        }
+      >
+        <SearchContent />
+      </Suspense>
+    </div>
   );
 }
