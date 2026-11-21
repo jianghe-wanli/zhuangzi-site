@@ -1,11 +1,10 @@
 # ──────────────────────────────────────────
-# SPA fallback — unmatched paths → 404 page
-# Cloudflare Pages serves this automatically
-# for non-existent files in static export
-# ──────────────────────────────────────────
-/* /404.html 404
-
-# ──────────────────────────────────────────
-# Future redirects: uncomment when routes change
-# ──────────────────────────────────────────
+# Cloudflare Pages 重定向规则
+#
+# 不需要 404 回退规则：Pages 对不存在的路径会自动返回最近一级的 404.html
+# （状态码 404）。此前的 `/* /404.html 404` 是 Netlify 语法，Pages 只接受
+# 200/301/302/303/307/308，该行被判为无效规则并忽略（wrangler 会告警）。
+#
+# 路由变更时在下面添加，例如：
 # /old-path /new-path 301
+# ──────────────────────────────────────────

@@ -30,9 +30,11 @@
   # src/lib/markup.ts 的 renderEmphasis()（先转义再只还原 **粗体**）。
   # 收紧路径见 docs/IMPROVEMENT-ROADMAP.md 第三节。
   #
+  # script-src-attr 'none'：内联 <script> 仍放行，但禁止 onclick= / onerror= 这类
+  #   内联事件属性 —— 即使有 HTML 注入也无法借属性执行脚本（React 不使用它们）。
   # img-src:     高德瓦片(webrd0{1-4}.is.autonavi.com)；地图标记图标已自托管
   # connect-src: api.deepseek.com (BYOK AI) + 高德瓦片
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org https://webrd01.is.autonavi.com https://webrd02.is.autonavi.com https://webrd03.is.autonavi.com https://webrd04.is.autonavi.com; connect-src 'self' https://api.deepseek.com https://tile.openstreetmap.org https://webrd01.is.autonavi.com https://webrd02.is.autonavi.com https://webrd03.is.autonavi.com https://webrd04.is.autonavi.com; font-src 'self'; media-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://webrd01.is.autonavi.com https://webrd02.is.autonavi.com https://webrd03.is.autonavi.com https://webrd04.is.autonavi.com; connect-src 'self' https://api.deepseek.com https://webrd01.is.autonavi.com https://webrd02.is.autonavi.com https://webrd03.is.autonavi.com https://webrd04.is.autonavi.com; font-src 'self'; media-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests
 
 # ──────────────────────────────────────────
 # 内容哈希命名的静态资源 — 永久不可变
@@ -41,20 +43,33 @@
   Cache-Control: public, max-age=31536000, immutable
 
 # ──────────────────────────────────────────
-# 图片与静态资产
+# 图片、字体、数据：文件名**不带内容哈希**，不能标 immutable。
+# 此前 /*.png 与 /*.woff2 都是「一年 + immutable」：OG 图、图标、字体分片
+# 一旦重新生成，老访客最长一年拿不到新文件（字体重新子集化后会缺字回退）。
+# 现改为短 max-age + stale-while-revalidate：过期后先用旧副本、后台校验（304）。
+# 回访速度另由 Service Worker 的 Cache-First 保证（随构建版本失效）。
 # ──────────────────────────────────────────
 /*.png
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 
 /*.svg
-  Cache-Control: public, max-age=604800, must-revalidate
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 
-# 自托管子集字体（内容哈希固定，见 TODO 3.1）
 /*.woff2
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=604800, stale-while-revalidate=31536000
 
 /*.json
   Cache-Control: public, max-age=3600, must-revalidate
+
+# OG 分享图会被第三方页面以 <img> 直接引用，放开 CORP（其余资源保持 same-origin）。
+# 先用 ! 摘掉 /* 区块继承的值，否则同名头会被逗号拼接成非法值。
+/og/*
+  ! Cross-Origin-Resource-Policy
+  Cross-Origin-Resource-Policy: cross-origin
+
+/og-image.png
+  ! Cross-Origin-Resource-Policy
+  Cross-Origin-Resource-Policy: cross-origin
 
 # ──────────────────────────────────────────
 # Service Worker 必须不被长缓存，否则新版本无法及时接管
@@ -62,16 +77,9 @@
 /sw.js
   Cache-Control: public, max-age=0, must-revalidate
 
-# ──────────────────────────────────────────
-# HTML — 短 TTL + stale-while-revalidate
-# Cloudflare CDN 在回源校验期间继续提供旧副本
-# ──────────────────────────────────────────
-/*.html
-  Cache-Control: public, max-age=0, must-revalidate, stale-while-revalidate=3600
-
-# ──────────────────────────────────────────
-# AI 代理绝不缓存
-# ──────────────────────────────────────────
-/api/*
-  Cache-Control: no-store
-  X-Robots-Tag: noindex
+# 说明：
+# - HTML 与 RSC 载荷（*.txt）不需要规则：Pages 默认即
+#   `public, max-age=0, must-revalidate`。此前的 `/*.html` 规则匹配不到任何页面
+#   （页面地址是 /chapters/x/，不以 .html 结尾），已删除。
+# - /api/* 由 Pages Function 响应，_headers 对 Functions 不生效，
+#   相应的 no-store / nosniff / noindex 在 functions/api/chat.js 里设置。
