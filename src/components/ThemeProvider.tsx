@@ -8,12 +8,10 @@ import {
   isThemeName,
   THEME_STORAGE_KEY,
   type ThemeName,
-  themes,
-} from "@/lib/theme";
+} from "@/lib/theme-meta";
 
-// 调色板已迁移至 @/lib/theme（单一数据源）。此处只负责状态与副作用。
-// 重新导出以兼容既有 import 点（ThemeSwitcher 等）。
-export { themes };
+// 调色板在 globals.css（由 @/lib/theme 生成）。此处只负责状态与副作用，
+// 且只依赖 theme-meta —— 不要 import "@/lib/theme"，会把调色板带进共享 JS。
 export type { ThemeName };
 
 interface ThemeContextType {

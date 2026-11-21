@@ -17,7 +17,18 @@
  * 保证 AA 修复不会再被悄悄改坏。
  */
 
-export type ThemeName = "xuanzhi" | "zhujian" | "moyun" | "qinghua" | "yedu";
+import {
+  DEFAULT_THEME,
+  THEME_META,
+  THEME_STORAGE_KEY,
+  type ThemeMeta,
+  type ThemeName,
+  themeNames,
+} from "./theme-meta";
+
+// 客户端组件请直接 import "@/lib/theme-meta"，不要经由本文件（会把调色板带进 bundle）
+export { applyThemeToDocument, DEFAULT_THEME, isThemeName, THEME_STORAGE_KEY, themeNames } from "./theme-meta";
+export type { ThemeName };
 
 /** 一个主题需要覆盖的全部可换肤颜色 */
 export interface ThemeColors {
@@ -50,24 +61,13 @@ export interface ThemeColors {
   shadowRgb: string;
 }
 
-export interface ThemeDefinition {
-  /** 中文显示名 */
-  name: string;
-  /** 切换器图标 */
-  icon: string;
-  /** 是否深色配色 —— 用于 color-scheme 与 <meta name="theme-color"> */
-  dark: boolean;
-  /** 浏览器 UI 主题色 */
-  themeColor: string;
+export interface ThemeDefinition extends ThemeMeta {
   colors: ThemeColors;
 }
 
 export const themes: Record<ThemeName, ThemeDefinition> = {
   xuanzhi: {
-    name: "宣纸",
-    icon: "宣",
-    dark: false,
-    themeColor: "#8E5431",
+    ...THEME_META.xuanzhi,
     colors: {
       bgPrimary: "#FAF8F4",
       bgSecondary: "#F3ECE1",
@@ -94,10 +94,7 @@ export const themes: Record<ThemeName, ThemeDefinition> = {
     },
   },
   zhujian: {
-    name: "竹简",
-    icon: "竹",
-    dark: false,
-    themeColor: "#5A6B3A",
+    ...THEME_META.zhujian,
     colors: {
       bgPrimary: "#F3F0E4",
       bgSecondary: "#E8E3D2",
@@ -125,10 +122,7 @@ export const themes: Record<ThemeName, ThemeDefinition> = {
     },
   },
   moyun: {
-    name: "墨韵",
-    icon: "墨",
-    dark: false,
-    themeColor: "#333333",
+    ...THEME_META.moyun,
     colors: {
       bgPrimary: "#F5F5F5",
       bgSecondary: "#EEEEEE",
@@ -156,10 +150,7 @@ export const themes: Record<ThemeName, ThemeDefinition> = {
     },
   },
   qinghua: {
-    name: "青花",
-    icon: "青",
-    dark: false,
-    themeColor: "#2B5F8A",
+    ...THEME_META.qinghua,
     colors: {
       bgPrimary: "#F7F9FB",
       bgSecondary: "#EDF2F7",
@@ -193,10 +184,7 @@ export const themes: Record<ThemeName, ThemeDefinition> = {
    * 长文夜读没有可用方案。此主题把那份配色接回真实可切换的状态。
    */
   yedu: {
-    name: "夜读",
-    icon: "夜",
-    dark: true,
-    themeColor: "#14120F",
+    ...THEME_META.yedu,
     colors: {
       bgPrimary: "#161412",
       bgSecondary: "#1F1B16",
@@ -224,9 +212,6 @@ export const themes: Record<ThemeName, ThemeDefinition> = {
   },
 };
 
-export const DEFAULT_THEME: ThemeName = "xuanzhi";
-export const THEME_STORAGE_KEY = "siteTheme";
-
 /** ThemeColors 字段 → CSS 自定义属性名。内联脚本与 Provider 共用。 */
 export const CSS_VAR_BY_KEY: Record<keyof ThemeColors, string> = {
   bgPrimary: "--bg-primary",
@@ -251,12 +236,6 @@ export const CSS_VAR_BY_KEY: Record<keyof ThemeColors, string> = {
   selectionBg: "--selection-bg",
   shadowRgb: "--shadow-rgb",
 };
-
-export const themeNames = Object.keys(themes) as ThemeName[];
-
-export function isThemeName(value: unknown): value is ThemeName {
-  return typeof value === "string" && Object.prototype.hasOwnProperty.call(themes, value);
-}
 
 /** 把一个主题展开成 [cssVarName, value][]，供 Provider 与内联脚本使用 */
 export function themeCssVarEntries(name: ThemeName): [string, string][] {
@@ -317,19 +296,4 @@ export function buildInlineThemeScript(): string {
   )});if(!M.hasOwnProperty(t)){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'yedu':${JSON.stringify(
     DEFAULT_THEME
   )};}var r=document.documentElement,d=M[t][1];r.setAttribute('data-theme',t);r.classList.toggle('dark',!!d);r.style.colorScheme=d?'dark':'light';var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute('content',M[t][0]);}}catch(e){}})()`;
-}
-
-/**
- * 运行时把主题写入 document —— 与内联脚本完全相同的副作用
- * （ThemeProvider 与命令台共用）。
- */
-export function applyThemeToDocument(name: ThemeName): void {
-  const root = document.documentElement;
-  const def = themes[name];
-  root.setAttribute("data-theme", name);
-  // 深色主题挂上 .dark：globals.css 的 .dark 结构性规则由此生效
-  root.classList.toggle("dark", def.dark);
-  // 让原生控件（滚动条、表单、日期选择器）跟随主题明暗
-  root.style.colorScheme = def.dark ? "dark" : "light";
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", def.themeColor);
 }

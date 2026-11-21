@@ -151,4 +151,10 @@ describe("主题系统完整性", () => {
     // 不一致时，把 Expected 的内容粘贴到 globals.css 两个标记之间
     expect(actual).toBe(buildThemeCss());
   });
+
+  it("切换器圆点色（theme-meta 的 swatch）等于各主题 textAccent", () => {
+    for (const name of themeNames) {
+      expect(themes[name].swatch, name).toBe(themes[name].colors.textAccent);
+    }
+  });
 });

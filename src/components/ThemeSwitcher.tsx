@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { themeNames, themes } from "@/lib/theme";
+import { THEME_META, themeNames } from "@/lib/theme-meta";
 
 import { useTheme } from "./ThemeProvider";
 
@@ -35,7 +35,7 @@ export default function ThemeSwitcher() {
     };
   }, [open]);
 
-  const current = themes[theme] ?? themes.xuanzhi;
+  const current = THEME_META[theme] ?? THEME_META.xuanzhi;
 
   return (
     <div ref={ref} className="relative">
@@ -59,7 +59,7 @@ export default function ThemeSwitcher() {
         <span
           aria-hidden="true"
           className="w-2 h-2 rounded-full shrink-0"
-          style={{ background: current.colors.textAccent }}
+          style={{ background: current.swatch }}
         />
       </button>
 
@@ -73,7 +73,7 @@ export default function ThemeSwitcher() {
             className="absolute right-0 top-full mt-2 z-50 min-w-[9rem] p-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] shadow-lg"
           >
             {themeNames.map((key) => {
-              const def = themes[key];
+              const def = THEME_META[key];
               const selected = mounted && theme === key;
               return (
                 <button
