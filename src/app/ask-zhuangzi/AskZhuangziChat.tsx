@@ -4,6 +4,7 @@ import { useEffect,useRef, useState } from "react";
 
 import { chatMultiTurnStream, getApiKey, saveApiKey } from "@/lib/ai";
 import { search } from "@/lib/search";
+import { useAbortable } from "@/lib/use-abortable";
 
 const LIFE_TOPICS = [
   { seal: "安", label: "焦虑不安" },
@@ -37,6 +38,8 @@ export default function AskZhuangziChat() {
   const bottomRef = useRef<HTMLDivElement>(null);
   // 是否已有用户消息：首次挂载只有问候语，不应自动滚屏（视觉复审 N2）
   const hasInteracted = useRef(false);
+
+  const newSignal = useAbortable();
 
   useEffect(() => {
     const saved = getApiKey();
@@ -100,7 +103,7 @@ export default function AskZhuangziChat() {
             return copy;
           });
         },
-        { temperature: 0.8, maxTokens: 512 }
+        { temperature: 0.8, maxTokens: 512, signal: newSignal() }
       );
     } catch (err) {
       // 失败时回填之前追加的空气泡，避免"空助手气泡 + 错误气泡"两条
@@ -121,11 +124,7 @@ export default function AskZhuangziChat() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-      <h1 className="text-2xl sm:text-3xl font-bold tracking-wide mb-2">问庄子</h1>
-      <p className="text-sm text-[var(--text-secondary)] mb-6">
-        心有困惑？与庄子对谈，以古人之智慧解今人之心结
-      </p>
+    <>
 
       {/* API Key Setup */}
       {showSetup && (
@@ -192,6 +191,6 @@ export default function AskZhuangziChat() {
           </button>
         </form>
       </div>
-    </div>
+    </>
   );
 }

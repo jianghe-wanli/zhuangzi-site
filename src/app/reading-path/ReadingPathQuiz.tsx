@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 
 import { chat as deepseekChat } from "@/lib/ai";
 import type { ChapterBrief } from "@/lib/chapter-lookup";
+import { useAbortable } from "@/lib/use-abortable";
 
 import { CHAPTER_MAP } from "./chapter-map";
 
@@ -64,6 +65,7 @@ const QUESTIONS: Question[] = [
 ];
 
 export default function ReadingPathQuiz({ chapters }: { chapters: ChapterBrief[] }) {
+  const newSignal = useAbortable();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
@@ -86,6 +88,7 @@ export default function ReadingPathQuiz({ chapters }: { chapters: ChapterBrief[]
 
         try {
           const aiReasoning = await deepseekChat({
+            signal: newSignal(),
             systemPrompt: `你是庄子研究专家。请根据用户的阅读偏好问卷结果，解释为什么推荐这些庄子篇章给他们。语气亲切有文采，150字以内。`,
             userMessage: `用户选择了：${JSON.stringify(
               finalAnswers
@@ -103,7 +106,7 @@ export default function ReadingPathQuiz({ chapters }: { chapters: ChapterBrief[]
         setLoading(false);
       }
     },
-    [chapters]
+    [chapters, newSignal]
   );
 
   const handleAnswer = (qId: number, value: string) => {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { chapters } from "@/data/chapters";
+import { breadcrumbJsonLd } from "@/lib/breadcrumb-jsonld";
 import { buildPageMetadata } from "@/lib/site";
 
 import TranslateChallenge, { type ChallengeItem } from "./TranslateChallenge";
@@ -20,5 +21,13 @@ const items: ChallengeItem[] = chapters.flatMap((ch) =>
 );
 
 export default function TranslateChallengePage() {
-  return <TranslateChallenge items={items} />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: breadcrumbJsonLd("译文挑战", "/translate-challenge") }}
+      />
+      <TranslateChallenge items={items} />
+    </>
+  );
 }

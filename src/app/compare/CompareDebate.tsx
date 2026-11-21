@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { chat as deepseekChat } from "@/lib/ai";
 import { search } from "@/lib/search";
+import { useAbortable } from "@/lib/use-abortable";
 
 // 2026-08-24 视觉复审：emoji 换「印章字」（单字入印，随主题换色）
 const TOPICS = [
@@ -27,6 +28,7 @@ const SCHOOLS = [
 ];
 
 export default function CompareDebate() {
+  const newSignal = useAbortable();
   const [topic, setTopic] = useState<string | null>(null);
   const [selectedSchools, setSelectedSchools] = useState(
     SCHOOLS.filter((s) => s.selected).map((s) => s.id)
@@ -64,6 +66,7 @@ export default function CompareDebate() {
       }
 
       const response = await deepseekChat({
+        signal: newSignal(),
         systemPrompt: `你是中国古代哲学比较研究专家。请并排对比各家思想。
 
 格式要求：
@@ -84,15 +87,11 @@ export default function CompareDebate() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-      <h1 className="text-2xl sm:text-3xl font-bold tracking-wide mb-2">诸子对谈</h1>
-      <p className="text-sm text-[var(--text-secondary)] mb-6">
-        同一话题，不同视角。选一个话题，看诸子如何各抒己见
-      </p>
+    <>
 
       {/* Topic selection */}
       <div className="mb-6">
-        <h2 id="compare-topic" className="text-xs font-medium text-[var(--text-secondary)] mb-2 tracking-wider">选择话题</h2>
+        <h2 id="compare-topic" className="font-serif! text-xs font-medium text-[var(--text-secondary)] mb-2 tracking-wider">选择话题</h2>
         <div className="flex flex-wrap gap-2">
           {TOPICS.map((t) => (
             <button key={t.id} type="button" aria-pressed={topic === t.label} onClick={() => setTopic(t.label)}
@@ -112,7 +111,7 @@ export default function CompareDebate() {
 
       {/* School selection */}
       <div className="mb-6">
-        <h2 id="compare-school" className="text-xs font-medium text-[var(--text-secondary)] mb-2 tracking-wider">选择学派（至少2家）</h2>
+        <h2 id="compare-school" className="font-serif! text-xs font-medium text-[var(--text-secondary)] mb-2 tracking-wider">选择学派（至少2家）</h2>
         <div className="flex flex-wrap gap-2">
           {SCHOOLS.map((s) => (
             <button key={s.id} type="button" aria-pressed={selectedSchools.includes(s.id)} onClick={() => toggleSchool(s.id)}
@@ -144,6 +143,6 @@ export default function CompareDebate() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

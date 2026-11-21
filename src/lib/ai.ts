@@ -19,7 +19,11 @@ export function getApiKey(): string | null {
 }
 
 export function saveApiKey(key: string): void {
-  localStorage.setItem("deepseek_key", key);
+  try {
+    localStorage.setItem("deepseek_key", key);
+  } catch {
+    /* 隐私模式 / 存储已满：本次会话内仍可用，只是不持久化 */
+  }
 }
 
 export interface ChatOptions {

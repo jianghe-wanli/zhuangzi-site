@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { chat as deepseekChat } from "@/lib/ai";
+import { useAbortable } from "@/lib/use-abortable";
 
 /** 候选题目：由 server 页面按长度筛好后传入（只带原文与篇名） */
 export interface ChallengeItem {
@@ -21,6 +22,7 @@ function pickRandomPassage(items: ChallengeItem[]): Current | null {
 }
 
 export default function TranslateChallenge({ items }: { items: ChallengeItem[] }) {
+  const newSignal = useAbortable();
   const [dataLoading, setDataLoading] = useState(true);
   const [current, setCurrent] = useState<Current | null>(null);
   const [userTranslation, setUserTranslation] = useState("");
@@ -71,6 +73,7 @@ export default function TranslateChallenge({ items }: { items: ChallengeItem[] }
 
     try {
       const reply = await deepseekChat({
+        signal: newSignal(),
         systemPrompt: `你是古汉语翻译评分专家。请评估用户的翻译。
 
 评分标准（满分100）：
@@ -119,7 +122,7 @@ export default function TranslateChallenge({ items }: { items: ChallengeItem[] }
     } finally {
       setSubmitting(false);
     }
-  }, [userTranslation, current, submitting, totalAttempts, totalScore]);
+  }, [userTranslation, current, submitting, totalAttempts, totalScore, newSignal]);
 
   const handleNext = () => {
     setCurrent(pickRandomPassage(items));
