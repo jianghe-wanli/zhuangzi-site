@@ -7,6 +7,9 @@ import { restoreProgress,saveProgress } from "@/lib/reading-progress";
 
 import { recordReading } from "./ReadingHistory";
 
+/** 已按 #锚点对齐过的「篇章 + 锚点」 */
+let anchoredFor = "";
+
 interface Props {
   chapterId: string;
   chapterTitle: string;
@@ -46,8 +49,11 @@ export default function RecordReading({ chapterId, chapterTitle }: Props) {
     // 浏览器的原生锚点滚动发生在 content-visibility:auto 的段落按估算高度占位时，
     // 前面的段落渲染出真实高度后目标会被推走（实测齐物论第 6 节偏出 3000px）——
     // 布局稳定后重新对齐，连做两帧。
+    // 同一个锚点只在首次到达时对齐；之后回到本页（后退等）仍按上次阅读进度恢复。
     let target: HTMLElement | null = null;
-    if (window.location.hash) {
+    const mark = chapterId + window.location.hash;
+    if (window.location.hash && anchoredFor !== mark) {
+      anchoredFor = mark;
       try {
         target = document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
       } catch {
@@ -56,7 +62,7 @@ export default function RecordReading({ chapterId, chapterTitle }: Props) {
     }
     let raf2 = 0;
     const raf = requestAnimationFrame(() => {
-      if (!window.location.hash) {
+      if (!target) {
         restoreProgress(chapterId);
         return;
       }

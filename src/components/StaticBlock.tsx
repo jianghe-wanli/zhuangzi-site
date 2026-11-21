@@ -15,16 +15,15 @@ const RELOAD_GUARD = "zhuangzi:sb-reload";
 /** 取回失败且已经整页重载过一次的 src：改为在页内给出提示，绝不再次重载 */
 const failed = new Set<string>();
 
+/** 渲染期等待用的 promise（每个 src 一个，身份稳定 —— React 的 use() 要求如此） */
+const loading = new Map<string, Promise<Blocks>>();
+
 function loadBlocks(src: string): Promise<Blocks> {
-  const existing = pending.get(src);
-  if (existing) {
-    // 预取失败过的 promise 已被移除；这里拿到的要么在途、要么已成功
-    return existing.catch(() => {
-      pending.delete(src);
-      return loadBlocks(src);
-    });
-  }
-  const p = fetchBlocks(src).catch(() => {
+  const existing = loading.get(src);
+  if (existing) return existing;
+  // 预取在途或已完成就接着用；没有预取，或预取失败了，（再）取一次
+  const first = pending.get(src) ?? fetchBlocks(src);
+  const p = first.catch(() => fetchBlocks(src)).catch(() => {
     // 取不到（离线且未缓存 / 部署切换后旧页面取新产物）：退回整页加载目标页，由 HTML 直出正文。
     // 注意此刻客户端导航多半还没提交（transition 挂起中，地址栏仍是来源页），
     // 所以不能 location.reload() —— 那会把用户留在来源页；要显式前往目标页。
@@ -48,6 +47,7 @@ function loadBlocks(src: string): Promise<Blocks> {
     else window.location.assign(target + (intendedHash.get(src) ?? ""));
     return new Promise<Blocks>(() => {});
   });
+  loading.set(src, p);
   pending.set(src, p);
   return p;
 }
@@ -119,7 +119,8 @@ export default function StaticBlock({ src, id, as = "div", className, ssrOnly, t
   const [initial] = useState(() => initialHtml(src, key, ssrOnly));
   const [hot, setHot] = useState<Html | null>(null);
   let html = hot ?? initial;
-  let fetched = false;
+  // 客户端路由进入（不是水合）：内容来自预取缓存或下面的 Suspense 等待
+  const clientEntered = initial !== EMPTY;
   if (!html) {
     use(loadBlocks(src));
     html = known.get(key) ?? EMPTY;
@@ -127,7 +128,6 @@ export default function StaticBlock({ src, id, as = "div", className, ssrOnly, t
       if (!failureOwner.has(src)) failureOwner.set(src, id);
       html = failureOwner.get(src) === id ? FAILED_HTML : EMPTY;
     }
-    fetched = true;
   }
 
   // 开发模式 HMR：服务端块内容变了（rev 变化）而本组件 props 之外没有任何东西会更新，
@@ -152,7 +152,7 @@ export default function StaticBlock({ src, id, as = "div", className, ssrOnly, t
   // 经 Suspense 等待后才出现的页面：Next 的锚点滚动发生在骨架屏阶段
   // （目标尚不存在），这里在内容就位后补一次。
   useEffect(() => {
-    if (!fetched || !window.location.hash) return;
+    if (!clientEntered || !window.location.hash) return;
     const mark = src + window.location.hash;
     if (hashHandledFor === mark) return;
     hashHandledFor = mark;
@@ -163,7 +163,7 @@ export default function StaticBlock({ src, id, as = "div", className, ssrOnly, t
       /* 非法 hash：忽略 */
     }
     target?.scrollIntoView({ block: "start" });
-  }, [fetched, src]);
+  }, [clientEntered, src]);
 
   /** 块内站内链接（普通 <a>）的地址；不是可接管的站内链接则返回 null */
   const internalLink = (e: SyntheticEvent<HTMLElement>): string | null => {
