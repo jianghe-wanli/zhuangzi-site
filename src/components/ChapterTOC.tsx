@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { beginAnchorJump } from "@/lib/anchor-jump";
 import { subscribeCurrentPassage } from "@/lib/passage-dom";
 
 interface TocItem {
@@ -63,6 +64,7 @@ export default function ChapterTOC({ items }: ChapterTOCProps) {
                 aria-current={activeId === `passage-${p.id}` ? "location" : undefined}
                 onClick={(e) => {
                   e.preventDefault();
+                  beginAnchorJump();
                   document.getElementById(`passage-${p.id}`)?.scrollIntoView({ behavior: "smooth" });
                   history.replaceState(null, "", `#passage-${p.id}`);
                 }}

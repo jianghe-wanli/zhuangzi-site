@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { createElement, type MouseEvent, type SyntheticEvent, use, useEffect, useState } from "react";
 
+import { beginAnchorJump } from "@/lib/anchor-jump";
 import { type Blocks, captured, fetchBlocks, type Html, intendedHash, known, pending } from "@/lib/static-blocks-client";
 
 /** 与 src/lib/static-html.ts 的 STATIC_BLOCKS_KEY 相同（那边是 server-only，不能 import） */
@@ -164,7 +165,9 @@ export default function StaticBlock({ src, id, anchorId, as = "div", className, 
     } catch {
       /* 非法 hash：忽略 */
     }
-    target?.scrollIntoView({ block: "start" });
+    if (!target) return;
+    beginAnchorJump();
+    target.scrollIntoView({ block: "start" });
   }, [clientEntered, src]);
 
   /** 块内站内链接（普通 <a>）的地址；不是可接管的站内链接则返回 null */
@@ -177,6 +180,12 @@ export default function StaticBlock({ src, id, anchorId, as = "div", className, 
 
   const onClick = (e: MouseEvent<HTMLElement>) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    // 块内页内锚点（如「阅览篇末总结」）：跳转本身交给浏览器，这里只保证终点按真实高度计算
+    const hashLink = (e.target as Element).closest?.('a[href^="#"]');
+    if (hashLink && e.currentTarget.contains(hashLink)) {
+      beginAnchorJump();
+      return;
+    }
     const href = internalLink(e);
     if (!href) return;
     e.preventDefault();
