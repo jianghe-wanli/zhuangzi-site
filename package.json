@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/validate-data.mjs && node scripts/gen-og-images.mjs && node scripts/gen-lazy-data.mjs && next build && node scripts/fix-rsc-payload-paths.mjs && node scripts/clean-duplicate-payload.mjs && node scripts/bump-sw-version.mjs",
+    "build": "node scripts/validate-data.mjs && node scripts/gen-og-images.mjs && node scripts/gen-lazy-data.mjs && next build && node scripts/clean-duplicate-payload.mjs && node scripts/bump-sw-version.mjs",
     "start": "wrangler pages dev out --port 8788",
     "lint": "eslint --cache --cache-location .cache/eslint/ --max-warnings 0 \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\" \"scripts/**/*.mjs\" \"functions/**/*.js\" \"public/sw.js\" \"*.{ts,mjs}\"",
     "typecheck": "tsc --noEmit",

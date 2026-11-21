@@ -46,7 +46,8 @@ node scripts/check-budget.mjs   # 首屏体积
 src/
   app/                  App Router 路由
     layout.tsx          根布局：站点级 metadata、JSON-LD、主题内联脚本
-    <route>/layout.tsx  仅导出 metadata 的 server component
+    <route>/page.tsx    各路由自带 metadata（`buildPageMetadata()`）；交互部分下沉为客户端岛，
+                        不再用「只导出 metadata 的 layout.tsx」
                         （因为对应 page.tsx 是 "use client"，无法自己导出）
     chapters/[id]/      章节正文页（server component，构建期读取考据数据）
     concepts/[id]/      概念详情页
@@ -233,15 +234,3 @@ JS 只计现代浏览器实际下载的脚本：Next 每页输出的 `<script no
 * **无障碍**：暗色按钮对比度、热图主题感知、danger 色 token 全量修复
 
 线上地址：https://zhuangzi-site.pages.dev
-
-## 版本归档规则
-
-主目录 zhuangzi-site 为**工作版**，改版前先归档。归档脚本 `归档当前版本.ps1`
-放在维护者本机的上级目录，**不在本仓库内**（仓库内以 git 历史为准）：
-
-```powershell
-# 自动归档为 zhuangzi-site-vN，版本号递增
-powershell -File "归档当前版本.ps1"
-```
-
-已归档：zhuangzi-site-v1（历史备份）、zhuangzi-site-v2（原版基线）。

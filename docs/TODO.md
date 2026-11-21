@@ -200,7 +200,7 @@ node scripts/check-passage-regression.mjs  # 章节页产物结构回归
 
 | # | 项 | 结果 |
 | --- | --- | --- |
-| 3.1 | **字体子集化** | `python scripts/subset-font.py`：Noto Serif SC 可变字体按全站 4570 用字子集为 `public/fonts/zhuangzi-serif.woff2`（1.56MB，OFL）。`@font-face` + `font-display: swap` + unicode-range；`_headers` 不可变缓存；SW 已按 woff2 走 Cache-First。源字体 25MB gitignore，产物提交 |
+| 3.1 | **字体子集化** | `python scripts/subset-font.py`：Noto Serif SC 可变字体按全站 4570 用字子集为 `public/fonts/zhuangzi-serif.woff2`（1.56MB，OFL）。`@font-face` + `font-display: swap` + unicode-range（现按 unicode-range 切成 `public/fonts/slices/zhuangzi-cls-NN.<hash>.woff2` 分片，声明在 `src/app/font-faces.css`、随主样式表下发，不再内联进每页 `<head>`；`src/lib/font-faces.ts` 已删除）；分片文件名带内容哈希，`_headers` 一年 immutable，SW 放进不随发版清空的缓存。源字体 25MB gitignore，产物提交 |
 | 3.2 | **每页独立 OG 图** | `scripts/gen-og-images.mjs`（sharp）批量生成 33 篇 + 27 概念 1200×630 PNG（篇名+题解+篇序）；`lib/site.ts` 新增 `ogImageFor()`，章节页/概念页 metadata 接入。CI 需 `fonts-noto-cjk`（已加）。产物 gitignore |
 | 3.3 | **ReadingSettings 接入** | 接在导航栏工具区（桌面+移动）。修复其 CSS 变量从未被消费的问题：值映射为 CSS 长度（`CSS_VALUE_MAP`）、globals.css 增加 `--reading-*` 消费规则（默认值与原样式一致）、加载时恢复。补 Escape 关闭与遮罩 `aria-hidden` |
 | 3.4 | **死代码** | 删除 `ChapterNav`、`CrossReferencePanel`、`InkWashEffect`、`ShareCard`（零引用，约 20KB） |

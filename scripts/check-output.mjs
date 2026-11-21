@@ -237,6 +237,29 @@ if (existsSync(redirectsPath)) {
   }
 }
 
+// ── 10b：标了 immutable 的字体分片必须文件名带内容哈希 ──
+const slices = files
+  .map((f) => "/" + relative(OUT, f).replace(/\\/g, "/"))
+  .filter((f) => f.startsWith("/fonts/slices/") && f.endsWith(".woff2"));
+const unhashedSlices = slices.filter((f) => !/\.[0-9a-f]{8,}\.woff2$/.test(f));
+const slicesImmutable =
+  existsSync(headersPath) &&
+  /^\/fonts\/slices\/\*\n(?:[ \t]+.*\n)*?[ \t]+Cache-Control:.*immutable/m.test(readFileSync(headersPath, "utf8"));
+let sliceWarning = "";
+if (slicesImmutable && unhashedSlices.length) {
+  if (unhashedSlices.length === slices.length) {
+    // 字体改名（加哈希）在另一条分支上，合并前这里全部未带哈希：只提示，不失败
+    sliceWarning = `⚠️  /fonts/slices/* 已配 immutable，但 ${slices.length} 个分片文件名都不带内容哈希（合并字体改名后应消失）`;
+  } else {
+    note(`/fonts/slices/ 下有 ${unhashedSlices.length} 个未带哈希的分片却被标为 immutable: ${unhashedSlices[0]}`);
+  }
+}
+
+// ── 10c：按需 JSON 不应出现在 sitemap 里 ──
+if (existsSync(sitemapPath) && /<loc>[^<]*\.json<\/loc>/.test(readFileSync(sitemapPath, "utf8"))) {
+  note("sitemap 收录了 .json 路径");
+}
+
 // ── 11：Service Worker 离线页 ──
 const offlinePath = join(OUT, "offline", "index.html");
 if (!existsSync(offlinePath)) note("缺少 /offline/（sw.js 的离线兜底页）");
@@ -247,7 +270,7 @@ else if (/\/_next\/|\.woff2|<link[^>]+stylesheet/.test(readFileSync(offlinePath,
 // ── 12：RSC 载荷必须是点分式同层文件 ──
 // 目录式（__next.xxx/__PAGE__.txt）客户端从不请求，预取会全部 404。
 const nextDirs = files.filter((f) => /[\\/]__next\.[^\\/]+[\\/]/.test(f));
-if (nextDirs.length) note(`存在 ${nextDirs.length} 个目录式 RSC 载荷 —— fix-rsc-payload-paths.mjs 未生效`);
+if (nextDirs.length) note(`存在 ${nextDirs.length} 个目录式 RSC 载荷（客户端只请求点分式同层文件，这些会全部 404）`);
 const dupPayload = files.filter((f) => f.endsWith("__next._full.txt")).length;
 if (dupPayload > 5) note(`仍有 ${dupPayload} 个 __next._full.txt —— clean-duplicate-payload.mjs 未生效`);
 
@@ -259,6 +282,7 @@ console.log(`canonical 指向首页  ${homeCanonical}   (历史基线: 22)`);
 console.log(`缺少 canonical      ${missingCanonical}`);
 console.log(`使用默认标题        ${genericTitle}   (历史基线: 15)`);
 console.log(`站内断链            ${brokenLinks.size}`);
+if (sliceWarning) console.log(sliceWarning);
 console.log(`分享图缺失          ${missingOg}`);
 console.log("".padEnd(58, "-"));
 

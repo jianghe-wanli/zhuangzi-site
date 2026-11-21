@@ -31,6 +31,8 @@ Next.js 的 metadata 向下继承，导致所有未在自身 `generateMetadata` 
 
 修复：根布局不再声明 canonical；新增 `buildPageMetadata()`；
 为 15 个 `"use client"` 路由补 `layout.tsx` 提供各自 metadata。
+（后续：这些 metadata 已并入各自的 `page.tsx`，一次性生成器
+`scripts/gen-route-metadata.mjs` 随之删除。）
 
 | 指标 | 修复前 | 修复后 |
 | --- | --- | --- |
