@@ -66,6 +66,43 @@ const daoBlocks = JSON.parse(readFileSync(join(OUT, "concepts", "dao", "blocks.j
 ok(typeof daoBlocks.body === "string" && daoBlocks.body.includes("<h1"), "概念页 blocks.json 含正文");
 ok(daoHtml.includes("<h1") && !rscOf(daoHtml).includes("相关段落"), "概念页正文直出且不进 RSC 载荷");
 ok(daoHtml.includes('"DefinedTerm"') && daoHtml.includes('"BreadcrumbList"'), "概念页 JSON-LD 仍直出");
+// 列表页同样走静态块
+for (const [route, marker, sample] of [
+  ["chapters", "body", "入门首选"],
+  ["concepts", "grid", "个核心哲学概念"],
+]) {
+  const html = readFileSync(join(OUT, route, "index.html"), "utf8");
+  const blocks = JSON.parse(readFileSync(join(OUT, route, "blocks.json"), "utf8"));
+  ok(html.includes(`data-sb="/${route}/blocks.json#${marker}"`) && html.includes(blocks[marker]), `/${route} 列表正文直出且与 blocks.json 一致`);
+  ok(!rscOf(html).includes(sample), `/${route} 列表正文不进 RSC 载荷`);
+  ok(html.includes('<script type="application/ld+json"') && !("ld" in blocks), `/${route} JSON-LD 仍直出`);
+}
+// 直出的 HTML 与 blocks.json 必须是同一份内容（客户端路由进入与直接加载看到的 DOM 一致）
+ok(Object.values(qiwuBlocks).every((html) => qiwu.includes(html)), "章节页每个静态块的直出内容与 blocks.json 逐字节一致");
+// 属性名不得被改写成错误名字（逐块与 React 渲染比对在 tests/static-html.test.ts；这里对全部产物兜底）
+const BAD_ATTR = /^(classname|htmlfor|strokewidth|strokelinecap|strokelinejoin|fillrule|cliprule|clippath|xlinkhref|viewbox|charset|dangerouslysetinnerhtml|suppresshydrationwarning|key|ref|children|on[a-z]+)$/;
+const badAttrs = new Set();
+const walk = (dir) => {
+  for (const name of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, name.name);
+    if (name.isDirectory()) walk(full);
+    else if (name.name === "blocks.json") {
+      for (const html of Object.values(JSON.parse(readFileSync(full, "utf8")))) {
+        for (const tag of html.matchAll(/<[a-zA-Z][^>]*>/g)) {
+          for (const m of tag[0].matchAll(/\s([a-zA-Z:-]+)=/g)) if (BAD_ATTR.test(m[1])) badAttrs.add(m[1]);
+        }
+        if (/\[object Object\]|>undefined<|="undefined"/.test(html)) badAttrs.add("[object/undefined 泄漏]");
+      }
+    }
+  }
+};
+walk(join(OUT, "chapters"));
+walk(join(OUT, "concepts"));
+ok(badAttrs.size === 0, `全部 blocks.json 无错误属性名${badAttrs.size ? "：" + [...badAttrs].join(", ") : ""}`);
+// 工具条图标 sprite：每个图标的 path 全页只定义一次
+ok((qiwu.match(/<symbol id="tb-star"/g) || []).length === 1, "工具条 sprite 只出现一次");
+ok((qiwu.match(/<use href="#tb-star"/g) || []).length === (qiwu.match(/<section [^>]*data-passage-root/g) || []).length, "每段工具条引用 sprite 而非内联 path");
+ok(!qiwu.includes('placeholder="写下你的感悟'), "批注面板不再随首屏直出（首次打开时加载）");
 const BUDGET_RSC = 90 * 1024;
 ok(qiwuRsc.length < BUDGET_RSC, `章节页内联 RSC ${(qiwuRsc.length / 1024).toFixed(1)}KB < 90KB`);
 
