@@ -252,7 +252,12 @@ describe("/api/chat 转发", () => {
 describe("/api/chat 中止、超时与背压", () => {
   /** 一个受测试控制的上游 SSE 流：记录被 pull 的次数与是否被取消 */
   function controllableUpstream() {
-    const state = { pulls: 0, cancelled: false, push: (_chunk: string) => {}, end: () => {} };
+    const state: { pulls: number; cancelled: boolean; push: (chunk: string) => void; end: () => void } = {
+      pulls: 0,
+      cancelled: false,
+      push: () => {},
+      end: () => {},
+    };
     const encoder = new TextEncoder();
     const body = new ReadableStream<Uint8Array>(
       {
