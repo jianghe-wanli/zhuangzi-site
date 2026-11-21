@@ -161,7 +161,8 @@ export default function WordTooltipLayer({ chapterId }: { chapterId: string }) {
       activeRef.current = next;
       openedAtRef.current = performance.now();
       setShowAll(false);
-      setKaoju(undefined);
+      // 同一个词的另一处出现：考据按词查找，查找 effect 不会重跑，不能清空
+      if (prev?.term !== next.term) setKaoju(undefined);
       setActive(next);
     },
     [cancelClose, updatePosition]
