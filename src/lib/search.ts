@@ -28,17 +28,28 @@ let _searchIndex: SearchItem[] | null = null;
 let _indexPromise: Promise<SearchItem[]> | null = null;
 
 /** public/data/search-index.json 的结构（scripts/gen-lazy-data.mjs 构建期生成） */
-interface SlimChapter {
+export interface SlimChapter {
   id: string;
   title: string;
   category: string;
   passages: { id: string; o: string; t: string; c?: string[] }[];
 }
 
-async function loadSlimIndex(): Promise<SearchItem[]> {
-  const res = await fetch("/data/search-index.json");
-  if (!res.ok) throw new Error(`search index ${res.status}`);
-  const data = (await res.json()) as SlimChapter[];
+interface FullChapter {
+  id: string;
+  title: string;
+  category: string;
+  passages: {
+    id: string;
+    original: string;
+    translation: string;
+    commentary?: string;
+    concepts?: string[];
+  }[];
+}
+
+/** 精简索引 → 检索条目（不带注疏：搜索只匹配原文，结果卡片也不展示注疏） */
+export function slimToItems(data: SlimChapter[]): SearchItem[] {
   return data.flatMap((ch) =>
     ch.passages.map((p, i) => ({
       chapterId: ch.id,
@@ -55,9 +66,8 @@ async function loadSlimIndex(): Promise<SearchItem[]> {
   );
 }
 
-/** 兜底：索引文件不可用（如未跑过构建的 dev 环境）时退回打包的全量篇章数据 */
-async function loadFullIndex(): Promise<SearchItem[]> {
-  const { chapters } = await import("@/data/chapters");
+/** 全量篇章数据 → 检索条目 */
+export function fullToItems(chapters: FullChapter[]): SearchItem[] {
   return chapters.flatMap((ch) =>
     ch.passages.map((p, i) => ({
       chapterId: ch.id,
@@ -74,6 +84,18 @@ async function loadFullIndex(): Promise<SearchItem[]> {
       searchText: p.original,
     }))
   );
+}
+
+async function loadSlimIndex(): Promise<SearchItem[]> {
+  const res = await fetch("/data/search-index.json");
+  if (!res.ok) throw new Error(`search index ${res.status}`);
+  return slimToItems((await res.json()) as SlimChapter[]);
+}
+
+/** 兜底：索引文件不可用（离线未缓存、未跑过构建的 dev 环境）时退回打包的全量篇章数据 */
+async function loadFullIndex(): Promise<SearchItem[]> {
+  const { chapters } = await import("@/data/chapters");
+  return fullToItems(chapters);
 }
 
 async function ensureIndex(): Promise<{ searchIndex: SearchItem[] }> {

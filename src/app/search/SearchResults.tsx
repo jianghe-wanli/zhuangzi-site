@@ -28,11 +28,14 @@ export default function SearchResults() {
         if (cancelled) return;
         setResults(r);
         setSearched(true);
+        // 结果已就位，撤掉首屏占位高度（结果不足一屏时页脚回到原位）
+        delete document.documentElement.dataset.searching;
       })
       .catch((e) => {
         if (cancelled) return;
         console.error("[Search]", e);
         setError("搜索索引加载失败，请刷新重试");
+        delete document.documentElement.dataset.searching;
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -41,6 +44,11 @@ export default function SearchResults() {
       cancelled = true;
     };
   }, [initialQuery]);
+
+  // 离开搜索页时清掉占位标记
+  useEffect(() => () => {
+    delete document.documentElement.dataset.searching;
+  }, []);
 
   // Extract snippet around the matched keyword
   const getSnippet = (text: string, q: string, maxLen = 120) => {

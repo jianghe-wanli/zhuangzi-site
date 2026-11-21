@@ -27,6 +27,13 @@ export default function SearchPage() {
       </div>
 
       {/* useSearchParams 需要 Suspense 边界；标题区由 server 直出，不随之退化成 fallback */}
+      {/* 带查询词进入时先把结果区撑到一屏高：结果由客户端渲染，否则页脚会被结果列表整体推走（CLS） */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `if(/[?&]q=[^&]/.test(location.search))document.documentElement.dataset.searching=""`,
+        }}
+      />
+      <div className="[html[data-searching]_&]:min-h-screen">
       <Suspense
         fallback={
           <p className="py-12 text-center text-sm text-[var(--text-muted)] animate-pulse">正在加载搜索…</p>
@@ -34,6 +41,7 @@ export default function SearchPage() {
       >
         <SearchResults />
       </Suspense>
+      </div>
     </div>
   );
 }
