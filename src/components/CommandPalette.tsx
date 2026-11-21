@@ -232,10 +232,6 @@ export default function CommandPalette({
         perform: () => {
           const next = theme === "yedu" ? "xuanzhi" : "yedu";
           setTheme(next);
-          try {
-            localStorage.setItem("zhuangzi-theme", next);
-            document.documentElement.setAttribute("data-theme", next);
-          } catch {}
           closePalette();
         },
       },

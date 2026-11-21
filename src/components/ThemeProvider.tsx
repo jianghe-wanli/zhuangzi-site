@@ -3,10 +3,10 @@
 import { createContext, ReactNode,useCallback, useContext, useEffect, useState } from "react";
 
 import {
+  applyThemeToDocument,
   DEFAULT_THEME,
   isThemeName,
   THEME_STORAGE_KEY,
-  themeCssVarEntries,
   type ThemeName,
   themes,
 } from "@/lib/theme";
@@ -29,22 +29,6 @@ const ThemeContext = createContext<ThemeContextType>({
   mounted: false,
 });
 
-/** 把主题写入 document —— 与 head 内联脚本使用完全相同的映射表 */
-function applyTheme(name: ThemeName) {
-  const root = document.documentElement;
-  for (const [cssVar, value] of themeCssVarEntries(name)) {
-    root.style.setProperty(cssVar, value);
-  }
-  const def = themes[name];
-  // 深色主题挂上 .dark：globals.css 的 .dark 规则（含 hero-gradient）由此生效。
-  root.classList.toggle("dark", def.dark);
-  // 让原生控件（滚动条、表单、日期选择器）跟随主题明暗
-  root.style.colorScheme = def.dark ? "dark" : "light";
-  document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", def.themeColor);
-}
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeName>(DEFAULT_THEME);
   const [mounted, setMounted] = useState(false);
@@ -65,7 +49,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setThemeState(initial);
-    applyTheme(initial);
+    applyThemeToDocument(initial);
     setMounted(true);
   }, []);
 
@@ -82,7 +66,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       }
       const next: ThemeName = e.matches ? "yedu" : DEFAULT_THEME;
       setThemeState(next);
-      applyTheme(next);
+      applyThemeToDocument(next);
     };
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
@@ -90,7 +74,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((next: ThemeName) => {
     setThemeState(next);
-    applyTheme(next);
+    applyThemeToDocument(next);
     try {
       localStorage.setItem(THEME_STORAGE_KEY, next);
     } catch {

@@ -11,8 +11,9 @@
  * #A89880，且它们以 **行内样式** 落到 documentElement 上，优先级高于
  * 样式表，于是修复被完全抵消。
  *
- * 现在：调色板只在本文件定义；CSS 变量名映射、内联脚本、React Provider
- * 全部由此派生。tests/unit/theme-contrast.test.ts 会对每个主题校验对比度，
+ * 现在：调色板只在本文件定义；globals.css 的调色板区块是 buildThemeCss()
+ * 的逐字输出（由测试锁定一致），内联脚本与 React Provider 只切换
+ * <html data-theme>，不再写行内样式。tests/unit/theme-contrast.test.ts 会对每个主题校验对比度，
  * 保证 AA 修复不会再被悄悄改坏。
  */
 
@@ -266,28 +267,69 @@ export function themeCssVarEntries(name: ThemeName): [string, string][] {
   ]);
 }
 
+/** globals.css 中调色板区块的起止标记（区块内容必须等于 buildThemeCss()） */
+export const THEME_CSS_START = "/* @theme-palette:start */";
+export const THEME_CSS_END = "/* @theme-palette:end */";
+
+/**
+ * 把全部主题展开成 CSS 规则：默认主题落在 `:root`，其余落在
+ * `:root[data-theme="<name>"]`。
+ *
+ * globals.css 里 THEME_CSS_START/END 之间的区块是它的逐字输出
+ * （tests/theme-contrast.test.ts 校验二者一致；改调色板后运行
+ * `npx vitest run tests/theme-contrast.test.ts` 会给出应粘贴的内容）。
+ *
+ * 为什么放样式表而不是由内联脚本写行内样式：五套调色板的 JSON 约 3.9KB，
+ * 内联在根布局会在每个页面的 HTML 里出现两次（<script> 一次、RSC 载荷
+ * 一次）；放进外置 CSS 只下载一次且可缓存，JS 被禁用时默认主题也完整可用。
+ */
+export function buildThemeCss(): string {
+  const block = (selector: string, name: ThemeName) =>
+    `${selector} {\n${themeCssVarEntries(name)
+      .map(([k, v]) => `  ${k}: ${v};`)
+      .join("\n")}\n}`;
+  return [
+    block(":root", DEFAULT_THEME),
+    ...themeNames
+      .filter((n) => n !== DEFAULT_THEME)
+      .map((n) => block(`:root[data-theme="${n}"]`, n)),
+  ].join("\n");
+}
+
 /**
  * 生成防闪烁内联脚本。
- * 在 <head> 里同步执行：读 localStorage 主题 → 立刻写 CSS 变量，
- * 避免首帧用默认色渲染再跳变。脚本内容由上面的调色板派生，
- * 不再是手抄的字面量。
+ * 在 <head> 里同步执行：读 localStorage 主题 → 立刻在 <html> 上写
+ * data-theme（调色板本身在 globals.css，见 buildThemeCss），
+ * 避免首帧用默认色渲染再跳变。脚本只携带每个主题的明暗与 theme-color。
  *
- * 同时新增：没有存过主题时，跟随系统 prefers-color-scheme 选择夜读/宣纸。
+ * 没有存过主题时，跟随系统 prefers-color-scheme 选择夜读/默认。
  */
 export function buildInlineThemeScript(): string {
-  const palette: Record<string, Record<string, string>> = {};
-  for (const name of themeNames) {
-    palette[name] = Object.fromEntries(themeCssVarEntries(name));
-  }
+  // [themeColor, 是否深色(0/1)]
   const meta = Object.fromEntries(
-    themeNames.map((n) => [n, { dark: themes[n].dark, tc: themes[n].themeColor }])
+    themeNames.map((n) => [n, [themes[n].themeColor, themes[n].dark ? 1 : 0]])
   );
 
   // 注意：这段字符串会进入 dangerouslySetInnerHTML，内容全部来自本模块的
   // 构建期常量（无用户输入），JSON.stringify 已转义引号。
-  return `(function(){try{var P=${JSON.stringify(palette)},M=${JSON.stringify(
-    meta
-  )},D=${JSON.stringify(DEFAULT_THEME)};var t=localStorage.getItem(${JSON.stringify(
+  return `(function(){try{var M=${JSON.stringify(meta)},t=localStorage.getItem(${JSON.stringify(
     THEME_STORAGE_KEY
-  )});if(!t||!P[t]){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'yedu':D;}var v=P[t],r=document.documentElement;for(var k in v){r.style.setProperty(k,v[k]);}r.classList.toggle('dark',!!M[t].dark);r.style.colorScheme=M[t].dark?'dark':'light';var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute('content',M[t].tc);}}catch(e){}})()`;
+  )});if(!M.hasOwnProperty(t)){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'yedu':${JSON.stringify(
+    DEFAULT_THEME
+  )};}var r=document.documentElement,d=M[t][1];r.setAttribute('data-theme',t);r.classList.toggle('dark',!!d);r.style.colorScheme=d?'dark':'light';var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute('content',M[t][0]);}}catch(e){}})()`;
+}
+
+/**
+ * 运行时把主题写入 document —— 与内联脚本完全相同的副作用
+ * （ThemeProvider 与命令台共用）。
+ */
+export function applyThemeToDocument(name: ThemeName): void {
+  const root = document.documentElement;
+  const def = themes[name];
+  root.setAttribute("data-theme", name);
+  // 深色主题挂上 .dark：globals.css 的 .dark 结构性规则由此生效
+  root.classList.toggle("dark", def.dark);
+  // 让原生控件（滚动条、表单、日期选择器）跟随主题明暗
+  root.style.colorScheme = def.dark ? "dark" : "light";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", def.themeColor);
 }

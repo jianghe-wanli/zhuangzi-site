@@ -22,9 +22,9 @@
   --color-accent-deep: #703D20;    /* 深檀 — 悬停/激活 */
   --color-accent-gold: #BFA05E;    /* 金箔 — 装饰性强调 */
   --color-accent-vermilion: #C24438; /* 朱砂 — 重要标记 */
-  --color-danger: #C24438;           /* 危险/错误语义（主题感知值由 theme.ts 行内脚本覆盖） */
+  --color-danger: #C24438;           /* 危险/错误语义（主题感知值见下方调色板区块） */
   --color-accent-bamboo: #416353;  /* 远山竹青 — 概念标签/指示线（静态兜底，
-                                    主题感知值由 theme.ts 行内脚本覆盖） */
+                                    主题感知值见下方调色板区块） */
   --color-border: #E8DFCF;         /* 绢边 — 边框 */
   --color-border-light: #F2ECE1;   /* 轻绢 — 浅边框 */
   --color-border-strong: #D5C7B0;  /* 浓绢 — 深边框 */
@@ -65,23 +65,132 @@
 }
 
 /* ============================================
-   CSS Variables — Light Mode (default)
+   主题调色板（五套）
+
+   下面两个标记之间的区块是 src/lib/theme.ts 中 buildThemeCss() 的逐字输出，
+   请勿手改：改色请改 theme.ts，再把测试给出的新区块粘贴回来
+   （tests/theme-contrast.test.ts 锁定二者一致）。
+   <head> 内联脚本与 ThemeProvider 只切换 <html data-theme>。
    ============================================ */
+/* @theme-palette:start */
 :root {
-  --bg-primary: var(--color-paper);
-  --bg-secondary: var(--color-paper-warm);
+  --bg-primary: #FAF8F4;
+  --bg-secondary: #F3ECE1;
   --bg-card: #FFFFFF;
-  --bg-card-hover: var(--color-paper-cream);
-  --text-primary: var(--color-ink);
-  --text-secondary: var(--color-ink-soft);
-  --text-muted: var(--color-ink-muted);
-  --text-accent: var(--color-accent);
-  --border-color: var(--color-border);
-  --border-light: var(--color-border-light);
-  --border-strong: var(--color-border-strong);
-  --hover-bg: rgba(139, 94, 60, 0.06);
-  --hover-bg-strong: rgba(139, 94, 60, 0.10);
-  --selection-bg: rgba(139, 94, 60, 0.15);
+  --bg-card-hover: #FDFBF7;
+  --text-primary: #231C14;
+  --text-secondary: #665747;
+  --text-muted: #7E7062;
+  --text-accent: #8E5431;
+  --color-accent-deep: #703D20;
+  --color-accent-gold: #BFA05E;
+  --color-accent-bamboo: #416353;
+  --color-danger: #C24438;
+  --color-accent-vermilion: #B83B2E;
+  --btn-accent-text: #FFFFFF;
+  --border-color: #E8DFCF;
+  --border-light: #F2ECE1;
+  --border-strong: #D5C7B0;
+  --hover-bg: rgba(142, 84, 49, 0.06);
+  --hover-bg-strong: rgba(142, 84, 49, 0.10);
+  --selection-bg: rgba(142, 84, 49, 0.15);
+  --shadow-rgb: 35, 28, 20;
+}
+:root[data-theme="zhujian"] {
+  --bg-primary: #F3F0E4;
+  --bg-secondary: #E8E3D2;
+  --bg-card: #FAF7EC;
+  --bg-card-hover: #F2EEDD;
+  --text-primary: #3A3520;
+  --text-secondary: #6B6340;
+  --text-muted: #766D49;
+  --text-accent: #5A6B3A;
+  --color-accent-deep: #3F4C26;
+  --color-accent-gold: #A08B4A;
+  --color-accent-bamboo: #47705A;
+  --color-danger: #A4452E;
+  --color-accent-vermilion: #AD362B;
+  --btn-accent-text: #FFFFFF;
+  --border-color: #D8D0B0;
+  --border-light: #E8E2C8;
+  --border-strong: #C4B994;
+  --hover-bg: rgba(90, 107, 58, 0.07);
+  --hover-bg-strong: rgba(90, 107, 58, 0.12);
+  --selection-bg: rgba(90, 107, 58, 0.16);
+  --shadow-rgb: 58, 53, 32;
+}
+:root[data-theme="moyun"] {
+  --bg-primary: #F5F5F5;
+  --bg-secondary: #EEEEEE;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F7F7F7;
+  --text-primary: #1A1A1A;
+  --text-secondary: #5C5C5C;
+  --text-muted: #707070;
+  --text-accent: #333333;
+  --color-accent-deep: #111111;
+  --color-accent-gold: #8A8A8A;
+  --color-accent-bamboo: #55655C;
+  --color-danger: #C0392B;
+  --color-accent-vermilion: #B0382C;
+  --btn-accent-text: #FFFFFF;
+  --border-color: #D5D5D5;
+  --border-light: #E5E5E5;
+  --border-strong: #BDBDBD;
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --hover-bg-strong: rgba(0, 0, 0, 0.08);
+  --selection-bg: rgba(0, 0, 0, 0.12);
+  --shadow-rgb: 0, 0, 0;
+}
+:root[data-theme="qinghua"] {
+  --bg-primary: #F7F9FB;
+  --bg-secondary: #EDF2F7;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F4F8FC;
+  --text-primary: #1A2A3A;
+  --text-secondary: #4A6278;
+  --text-muted: #647483;
+  --text-accent: #2B5F8A;
+  --color-accent-deep: #1B4263;
+  --color-accent-gold: #7A93A8;
+  --color-accent-bamboo: #2F7A6D;
+  --color-danger: #C24438;
+  --color-accent-vermilion: #B0382C;
+  --btn-accent-text: #FFFFFF;
+  --border-color: #D0DDE8;
+  --border-light: #E0EAF3;
+  --border-strong: #B4C7D8;
+  --hover-bg: rgba(43, 95, 138, 0.06);
+  --hover-bg-strong: rgba(43, 95, 138, 0.11);
+  --selection-bg: rgba(43, 95, 138, 0.15);
+  --shadow-rgb: 26, 42, 58;
+}
+:root[data-theme="yedu"] {
+  --bg-primary: #161412;
+  --bg-secondary: #1F1B16;
+  --bg-card: #24201A;
+  --bg-card-hover: #2A2620;
+  --text-primary: #EAE4D9;
+  --text-secondary: #A69D8E;
+  --text-muted: #9A9081;
+  --text-accent: #D49B6A;
+  --color-accent-deep: #EFC08A;
+  --color-accent-gold: #DEBE7C;
+  --color-accent-bamboo: #689781;
+  --color-danger: #E06050;
+  --color-accent-vermilion: #E56B5B;
+  --btn-accent-text: #161412;
+  --border-color: #38322A;
+  --border-light: #2C2822;
+  --border-strong: #443E36;
+  --hover-bg: rgba(212, 155, 106, 0.08);
+  --hover-bg-strong: rgba(212, 155, 106, 0.14);
+  --selection-bg: rgba(212, 155, 106, 0.22);
+  --shadow-rgb: 0, 0, 0;
+}
+/* @theme-palette:end */
+
+:root {
   --shadow-sm: 0 1px 3px rgba(42, 34, 24, 0.04);
   --shadow-md: 0 4px 16px rgba(42, 34, 24, 0.06);
   --shadow-lg: 0 8px 32px rgba(42, 34, 24, 0.08);
@@ -101,11 +210,9 @@
 /* ============================================
    Dark Mode (.dark)
 
-   配色本身**不再**写在这里。所有可换肤颜色由 src/lib/theme.ts 定义，
-   并通过 <head> 内联脚本 + ThemeProvider 以行内样式写到 :root —
-   行内样式优先级高于本文件，重复声明只会造成两份互相漂移的真值
-   （历史上正是这样让一处 WCAG 修复被静默覆盖）。
-   `.dark` 类仍由 ThemeProvider 挂载，供下面这类**结构性**深色规则使用。
+   配色不写在这里：所有可换肤颜色由 src/lib/theme.ts 定义，生成上面的
+   调色板区块（唯一一份，测试锁定）。
+   `.dark` 类由内联脚本 / ThemeProvider 挂载，供下面这类**结构性**深色规则使用。
    ============================================ */
 .dark {
   /* 阴影在深色背景上需要更强的黑度才可见 */
