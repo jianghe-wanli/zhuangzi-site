@@ -1,16 +1,15 @@
-import Link from "next/link";
-
 import type { Passage, WordAnnotation } from "@/lib/chapters";
 import { findKaoju, type KaojuEntry } from "@/lib/kaoju-utils";
 import { renderEmphasis } from "@/lib/markup";
+import { internalHref, renderStatic } from "@/lib/static-html";
 
 import AnnotationPanel from "./AnnotationPanel";
-import ConceptTag from "./ConceptTag";
+import { StaticConceptTag } from "./ConceptTag";
 import KaojuSection from "./KaojuSection";
 import PassageToolbar from "./PassageToolbar";
 import PinyinSlot from "./PinyinSlot";
+import StaticBlock from "./StaticBlock";
 import TranslationCompare from "./TranslationCompare";
-import WordTooltip from "./WordTooltip";
 
 /** 原文内嵌名句标记（数据来自 quotes.json，章节页服务端构建期注入） */
 export interface PassageQuote {
@@ -62,7 +61,8 @@ interface PassageViewProps {
   chapterTitle?: string;
   /** 段落序号（从 1 开始） */
   passageNum?: number | undefined;
-  defaultExpanded?: boolean;
+  /** 本篇 blocks.json 的站内路径（静态块命名空间） */
+  src: string;
   /** 本篇陈鼓应考据数据（可选） */
   kaoju?: KaojuEntry[];
   /** 当前 passage 的段落级考据（陈鼓应注，可选） */
@@ -196,7 +196,7 @@ function intersectQuotes(
 }
 
 /** Render original text with annotation tooltips embedded（服务端直出） */
-function AnnotatedText({ original, annotations, chapterId, quotes }: { original: string; annotations?: WordAnnotation[] | undefined; chapterId: string; quotes?: PassageQuote[] | undefined }) {
+function AnnotatedText({ original, annotations, quotes }: { original: string; annotations?: WordAnnotation[] | undefined; quotes?: PassageQuote[] | undefined }) {
   const { segments } = splitAnnotations(original, annotations);
   const quoteRanges = quoteRangesOf(original, quotes);
 
@@ -222,8 +222,24 @@ function AnnotatedText({ original, annotations, chapterId, quotes }: { original:
           const halo =
             quoteRanges.length > 0 &&
             intersectQuotes(seg.text, start, quoteRanges).some((p) => p.quote && HAN_IN_PART.test(p.text));
+          // 纯静态按钮：浮层交互由页面级唯一的 WordTooltipLayer 事件委托接管
+          // （原先每个注释词一个客户端岛，逍遥游一篇 66 个）
           return (
-            <WordTooltip key={i} term={seg.ann.term} text={seg.ann.text} chapterId={chapterId} quoteHalo={halo}>{seg.text}</WordTooltip>
+            <button
+              key={i}
+              type="button"
+              data-anno={seg.ann.text}
+              data-term={seg.ann.term}
+              aria-expanded="false"
+              aria-label={`${seg.ann.term} — 查看注释`}
+              className="word-anno inline cursor-help text-left font-[inherit] text-[inherit] leading-[inherit] bg-transparent p-0 border-0 align-baseline"
+            >
+              <span
+                className={`border-b-2 border-dotted border-[var(--text-accent)]/40 hover:border-[var(--text-accent)] focus-visible:border-[var(--text-accent)] transition-colors${halo ? " quote-halo" : ""}`}
+              >
+                {seg.text}
+              </span>
+            </button>
           );
         }
         if (quoteRanges.length === 0) {
@@ -233,15 +249,14 @@ function AnnotatedText({ original, annotations, chapterId, quotes }: { original:
           // 名句被逐字注切断后，剩余片段可能只剩标点（如「，」夹在两个
           // WordTooltip 之间）——纯标点不做标记，否则出现「标点高亮」的怪相
           p.quote && HAN_IN_PART.test(p.text) ? (
-            <Link
+            <a
               key={`${i}-${j}`}
-              href={`/quotes#${p.quote.id}`}
-              prefetch={false}
+              href={internalHref(`/quotes#${p.quote.id}`)}
               className="quote-mark"
               title={`名句 · ${p.quote.theme}：${p.quote.explanation}`}
             >
               {p.text}
-            </Link>
+            </a>
           ) : (
             <span key={`${i}-${j}`}>{p.text}</span>
           )
@@ -329,36 +344,73 @@ function CommentaryBlock({ commentary, kaojuLookup }: { commentary?: string; kao
 }
 
 /**
- * 段落视图 —— 服务端组件（章节页首屏减重 v3）。
- *
- * 本组件不持有任何状态、**不经过任何 client 祖先**：原文/译文/注疏
- * 在服务端直出为 HTML；只有叶子位置的客户端岛（工具条 PassageToolbar、
- * 逐字注浮层 WordTooltip、拼音槽 PinyinSlot、多译本对照、段落级考据
- * KaojuSection、批注面板、概念标签）携带各自标量 props。
- * 译本对照与考据全文由构建脚本拆成按篇 JSON（/data/…），用户展开折叠区
- * 时才 fetch —— 首屏不再传输这两类大体积内容。
- * 分栏/拼音/批注的显示切换由工具条在 [data-passage-root] 上切 CSS 类实现。
+ * 一个段落的静态块（原文 / 译文 / 注疏+要义 / 概念标签）。
+ * 这些内容由 StaticBlock 经 SSR 直出，不进 RSC 载荷；空块不产出。
  */
-export default function PassageView({ passage, chapterId, chapterTitle, passageNum, kaoju, passageKaoju, passageKaojuFang, quotes }: PassageViewProps) {
-  // 构建期：把「注释词 → 命中考据」查好，只用于注疏区训诂行的服务端直出
-  // （WordTooltip 的训诂改由客户端按篇懒加载，不再进载荷）
+export function passageBlocks({ passage, kaoju, quotes }: Pick<PassageViewProps, "passage" | "kaoju" | "quotes">): Record<string, string> {
+  // 构建期：把「注释词 → 命中考据」查好，只用于注疏区训诂行的直出
   const kaojuLookup = buildKaojuLookup(kaoju, collectKaojuTerms(passage));
-
   // 分离出无法内联到原文的主题性注释，单独在「要义」区展示
   const thematicNotes = splitAnnotations(passage.original, passage.annotations).unmatched;
+  const id = passage.id;
 
+  const blocks: Record<string, string> = {
+    [`${id}-o`]: renderStatic(
+      <p className="original-text reading-prose leading-loose tracking-wide text-lg sm:text-xl">
+        <AnnotatedText original={passage.original} annotations={passage.annotations} quotes={quotes} />
+      </p>
+    ),
+    [`${id}-t`]: renderStatic(passage.translation),
+  };
+  if (passage.commentary || thematicNotes.length > 0) {
+    blocks[`${id}-c`] = renderStatic(
+      <>
+        {passage.commentary && (
+          <div className="mb-5">
+            <CommentaryBlock commentary={passage.commentary} kaojuLookup={kaojuLookup} />
+          </div>
+        )}
+        {/* 无法内联的主题性注释（庖丁解牛、朝三暮四之类） */}
+        <ThematicNotes notes={thematicNotes} />
+      </>
+    );
+  }
+  if (passage.concepts.length > 0) {
+    blocks[`${id}-g`] = renderStatic(
+      passage.concepts.map((cid) => <StaticConceptTag key={cid} conceptId={cid} size="sm" />)
+    );
+  }
+  return blocks;
+}
+
+/**
+ * 段落视图 —— 服务端组件（章节页首屏减重 v4）。
+ *
+ * 本组件不持有任何状态、**不经过任何 client 祖先**。v4 起原文/译文/注疏
+ * 不再作为 RSC 子树输出（那样同一份正文会在 HTML 与内联 RSC 载荷里各传
+ * 一遍），而是由 passageBlocks 渲染成静态块、经 StaticBlock 直出：
+ * RSC 载荷里只剩本组件的骨架与各客户端岛的标量 props。
+ * 客户端岛：工具条 PassageToolbar、拼音槽 PinyinSlot、多译本对照、
+ * 段落级考据 KaojuSection、批注面板；逐字注浮层由页面级 WordTooltipLayer
+ * 事件委托处理。译本对照与考据全文按篇懒加载（/data/…）。
+ * 分栏/拼音/批注的显示切换由工具条在 [data-passage-root] 上切 CSS 类实现。
+ *
+ * 调用方须先 registerStaticBlocks(src, passageBlocks(…))。
+ */
+export default function PassageView({ passage, chapterId, chapterTitle, passageNum, passageKaoju, passageKaojuFang, src }: PassageViewProps) {
   const translationCount = (passage.translations?.length ?? 0) + 1;
+  const hasCommentary = Boolean(passage.commentary) || splitAnnotations(passage.original, passage.annotations).unmatched.length > 0;
+  const id = passage.id;
 
   return (
     // 附加字面 group 类：globals.css 的 .group:hover > .passage-toolbar
     // 靠它显示工具条 —— Tailwind 命名分组 group/passage 是另一个 token，
-    // CSS 的 .group 匹配不到它（存量 bug：桌面端 hover 工具条从不出现，
-    // 仅触屏常驻与 focus-within 可救）
+    // CSS 的 .group 匹配不到它
     <section className="group/passage group" data-passage-root>
       {/* 客户端岛：工具条（只接收标量 props，不包裹正文） */}
       <PassageToolbar
         chapterId={chapterId}
-        passageId={passage.id}
+        passageId={id}
         chapterTitle={chapterTitle}
         passageNum={passageNum}
       />
@@ -368,56 +420,39 @@ export default function PassageView({ passage, chapterId, chapterTitle, passageN
           {/* Original */}
           <div className="original-block min-w-0">
             <div className="original-label text-[10px] font-medium text-[var(--text-muted)] tracking-[0.1em] uppercase mb-2">原文</div>
-            <div className="annotated-original">
-              <p className="original-text reading-prose leading-loose tracking-wide text-lg sm:text-xl">
-                <AnnotatedText original={passage.original} annotations={passage.annotations} chapterId={chapterId} quotes={quotes} />
-              </p>
-            </div>
+            <StaticBlock src={src} id={`${id}-o`} className="annotated-original" />
             {/* 拼音版原文（默认隐藏；切到 pinyin-on 时经 MutationObserver 挂载） */}
             <PinyinSlot />
           </div>
           {/* Translation */}
           <div className="translation-block min-w-0 border-l-2 border-[var(--border-light)] pl-4 sm:pl-6">
             <div className="translation-label text-[10px] font-medium text-[var(--text-muted)] tracking-[0.1em] uppercase mb-2">译文</div>
-            <p className="translation-text reading-prose">
-              {passage.translation}
-            </p>
-            <TranslationCompare chapterId={chapterId} passageId={passage.id} count={translationCount} />
+            <StaticBlock src={src} id={`${id}-t`} as="p" className="translation-text reading-prose" />
+            <TranslationCompare chapterId={chapterId} passageId={id} count={translationCount} />
           </div>
         </div>
 
-        {/* Commentary */}
-        {passage.commentary && (
-          <div className="mb-5">
-            <CommentaryBlock commentary={passage.commentary} kaojuLookup={kaojuLookup} />
-          </div>
-        )}
-
-        {/* 无法内联的主题性注释（庖丁解牛、朝三暮四之类） */}
-        <ThematicNotes notes={thematicNotes} />
+        {/* 注疏 + 要义 */}
+        {hasCommentary && <StaticBlock src={src} id={`${id}-c`} />}
 
         {/* 段落级注（陈鼓应 + 方勇，懒加载） */}
         <div className="mb-5">
           {passageKaoju && passageKaoju.length > 0 && (
-            <KaojuSection title="陈鼓应注" chapterId={chapterId} passageId={passage.id} count={passageKaoju.length} kind="chen" />
+            <KaojuSection title="陈鼓应注" chapterId={chapterId} passageId={id} count={passageKaoju.length} kind="chen" />
           )}
           {passageKaojuFang && passageKaojuFang.length > 0 && (
-            <KaojuSection title="方勇训诂" chapterId={chapterId} passageId={passage.id} count={passageKaojuFang.length} kind="fang" />
+            <KaojuSection title="方勇训诂" chapterId={chapterId} passageId={id} count={passageKaojuFang.length} kind="fang" />
           )}
         </div>
 
         {/* Concept tags */}
         {passage.concepts.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-5">
-            {passage.concepts.map((cid) => (
-              <ConceptTag key={`${passage.id}-${cid}`} conceptId={cid} size="sm" />
-            ))}
-          </div>
+          <StaticBlock src={src} id={`${id}-g`} className="flex flex-wrap gap-1.5 mb-5" />
         )}
 
         {/* 批注面板（默认隐藏；切到 annotation-on 时经 CSS 显示） */}
         <div className="annotation-panel">
-          <AnnotationPanel chapterId={chapterId} passageId={passage.id} />
+          <AnnotationPanel chapterId={chapterId} passageId={id} />
         </div>
       </div>
     </section>
