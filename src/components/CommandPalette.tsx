@@ -540,7 +540,7 @@ export default function CommandPalette({
                         : item.group === "哲学概念"
                         ? "bg-[var(--color-accent-gold)]/15 text-[var(--color-accent-gold)]"
                         : item.group === "寓言典故"
-                        ? "bg-[var(--accent-bamboo,#3A6B56)]/15 text-[var(--accent-bamboo,#3A6B56)]"
+                        ? "bg-[var(--color-accent-bamboo)]/15 text-[var(--color-accent-bamboo)]"
                         : item.group === "名句"
                         ? "bg-[var(--color-accent-vermilion)]/10 text-[var(--color-accent-vermilion)]"
                         : "bg-[var(--bg-secondary)] text-[var(--text-muted)]"
