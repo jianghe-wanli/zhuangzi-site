@@ -3,7 +3,6 @@
 > 这是**可直接开工**的待办清单。审计过程、证据与已修项见
 > [`IMPROVEMENT-ROADMAP.md`](./IMPROVEMENT-ROADMAP.md)。
 >
-> 项目路径：`C:\Users\Administrator\OneDrive\桌面\reasonix项目\zhuangzi-site`
 > 上次收尾：2026-08-21（P0+P1+P2 全干：章节页首屏 -45%、数据管线可复现、
 > Zod 形状校验、检索重写、字体子集化、OG 图、无障碍批次、TS 加严）
 > 2026-08-22 第二轮：信息架构补全、导航骨架屏、View Transitions、404 搜索化
@@ -20,11 +19,10 @@
 ## 0. 开工前先跑一遍，确认基线没坏
 
 ```bash
-cd "C:\Users\Administrator\OneDrive\桌面\reasonix项目\zhuangzi-site"
-npm run verify          # typecheck + lint + Zod 数据校验 + 79 个测试
+npm run verify          # typecheck + lint + Zod 数据校验 + 143 个测试
 npm run build
-node scripts/check-output.mjs    # canonical / sitemap / manifest / SW 版本
-node scripts/check-budget.mjs    # 首屏体积
+node scripts/check-output.mjs    # canonical / sitemap / robots / 断链 / OG 图 / _headers / SW
+node scripts/check-budget.mjs    # 首屏体积（绝对上限 + 相对 budget.json 基线 5%）
 node scripts/check-passage-regression.mjs  # 章节页产物结构回归
 ```
 
@@ -33,14 +31,16 @@ node scripts/check-passage-regression.mjs  # 章节页产物结构回归
 | 指标 | 当前值 | 上次收尾值 |
 | --- | --- | --- |
 | typecheck / lint | 0 错 | 0 错 |
-| 测试 | 79 passed | 79 passed |
-| 路由数 | 86（+ /recite） | 85 |
+| 测试 | 143 passed（+SW 19、/api/chat 20、manifest 3） | 101 passed |
+| 路由数 | 86（另有自包含的 /offline/，不计入体积统计） | 86 |
 | canonical 指向首页 | 0 | 0 |
 | 使用默认标题 | 0 | 0 |
-| 共享 JS 基线（gzip） | 196.8 KB | 194.8 KB |
-| 最重路由 | ~266 KB | 265.9 KB（/concepts/ziran） |
-| `out/` 总体积（部署前清理后） | ~36.3 MB | ~35.6 MB |
-| 站内零入链路由 | 0（/annotations 为分享落地页，刻意不加） | 5 |
+| 站内断链 / 分享图缺失 | 0 / 0（新增门禁） | 未检查 |
+| 共享 JS 基线（gzip） | 158.9 KB（新口径：不含 noModule polyfill 38.6 KB） | 197.5 KB（旧口径） |
+| 最重路由 | 278.0 KB（/concepts/dao） | 316.6 KB（旧口径） |
+| `out/` 总体积 | 41.5 MB | 43.7 MB |
+| OG 分享图（60 张） | 1.78 MB | 4.00 MB |
+| 站内零入链路由 | 0（/annotations 为分享落地页，刻意不加） | 0 |
 
 ⚠️ **三条不可破坏的约束**
 

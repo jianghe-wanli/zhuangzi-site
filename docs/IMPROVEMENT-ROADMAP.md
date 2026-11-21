@@ -187,6 +187,8 @@ Next.js 的 metadata 向下继承，导致所有未在自身 `generateMetadata` 
   `.gitignore` 规则对已跟踪文件无效，需手动执行：
   `git rm --cached _qiwu_data.json _updates_0*.json updates_json/*.json`
   （已在 `.gitignore` 注释中写明命令；未代为执行以免改动版本库状态）。
+  → ✅ 已删除（确认全仓无引用），`scripts/data/` 与 `archive/` 下 9 个逐字节相同的
+  重复脚本一并清理。
 
 > 仍存的结构性弱点：用户密钥途经本站。根治需改架构，见「🔷 三·1」。
 
@@ -448,6 +450,31 @@ localStorage 里的明文密钥。
 * 仓库根有已被 git 跟踪的散落数据文件（`_qiwu_data.json`、
   `_updates_02..07.json`、`updates_json/`）；`.gitignore` 的
   `_updates_*.json` 规则对已跟踪文件无效，需 `git rm --cached`。
+  → ✅ 已删除。
+
+---
+
+## 三·补 工程与交付二次审计（实测后修复）✅
+
+以下问题均在构建产物或 `wrangler pages dev` 上复现后修复：
+
+| 问题 | 证据 | 处理 |
+| --- | --- | --- |
+| CI 部署不带边缘函数 | deploy job 只下载 `out/`，工作目录无 `functions/` | 稀疏检出 `functions/` 与 `wrangler.toml` |
+| 未带哈希的文件被标一年 `immutable` | `/*.png`、`/*.woff2` 规则命中 OG 图、图标、字体分片 | 短 `max-age` + `stale-while-revalidate` |
+| `_redirects` 的 404 规则无效 | wrangler：`Valid status codes are 200, 301…  Got 404` | 删除（Pages 自动回退 404.html） |
+| `/*.html`、`/api/*` 头规则不生效 | 页面地址不以 `.html` 结尾；`_headers` 不作用于 Functions | 删除；头改在函数内设置 |
+| SW 响应等缓存落盘 | `await cache.put()` 后才 `return` | 改 `event.waitUntil` |
+| SW 离线兜底会被淘汰 / 不可用 | 兜底页与页面同缓存 FIFO 裁剪；`/404.html` 在 Pages 上是 308 | 独立 `/offline/` + 独立缓存 |
+| SW 每次发版清空哈希资源 | 所有缓存名都带 build ID | `/_next/static/*` 进无版本缓存 |
+| 客户端导航过的页面离线不可回访 | RSC `.txt` 未缓存 | 新增 RSC Network-First 缓存 |
+| `/api/chat` 体积上限按字符计 | 15 万字节的中文请求体通过了 128KB 限制 | 按字节流式计数 |
+| `/api/chat` 缺省 `temperature` 为 `null` | `Number(undefined) ?? 0.7` → `NaN` | 有限数值夹紧 |
+| robots.txt 屏蔽 noindex 页 | `/search/` 等 6 条 Disallow 与页面 noindex 并存 | 只 Disallow `/api/` |
+| manifest 色值过期 | `#8B5E3C` vs theme.ts `#8E5431` | 对齐并加测试 |
+| 体积门禁形同虚设 | `budget.json` 只写不读；预算高出实测 15–50% | 相对基线 5% 门禁 |
+| 体积口径虚高 | `noModule` polyfill 38.6KB 被计入每个路由 | 排除 |
+| OG 图偏大且摘要被裁 | 60 张 4.00MB；40 个全角字 × 30px = 1200px 超出画布 | 256 色调色板 → 1.78MB；截断 35 字 |
 
 ---
 
