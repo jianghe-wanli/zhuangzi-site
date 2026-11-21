@@ -1,9 +1,10 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+
+import { useLazyComponent } from "@/lib/use-lazy-component";
 
 import ReadingSettings from "./ReadingSettings";
 import SimplifiedToggle from "./SimplifiedToggle";
@@ -12,10 +13,7 @@ import ThemeSwitcher from "./ThemeSwitcher";
 import VerticalModeToggle from "./VerticalModeToggle";
 
 // 命令台按需挂载：首次按下 ⌘K / Ctrl+K 或点击导航栏 ⌘K 按钮前不拉取弹层 chunk
-const CommandPalette = dynamic(() => import("./CommandPalette"), {
-  ssr: false,
-  loading: () => null,
-});
+const loadCommandPalette = () => import("./CommandPalette");
 
 interface NavGroup {
   label: string;
@@ -95,12 +93,13 @@ function NavigationContent() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
-  const [paletteMounted, setPaletteMounted] = useState(false);
+  const [CommandPalette, loadPalette] = useLazyComponent(loadCommandPalette);
+  const paletteMounted = CommandPalette !== null;
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const openCommandPalette = () => {
     if (!paletteMounted) {
-      setPaletteMounted(true);
+      loadPalette();
     } else {
       window.dispatchEvent(new CustomEvent("zhuangzi:open-command-palette"));
     }
@@ -112,17 +111,17 @@ function NavigationContent() {
     const onBootstrapKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setPaletteMounted(true);
+        loadPalette();
       }
     };
-    const onBootstrapEvent = () => setPaletteMounted(true);
+    const onBootstrapEvent = () => loadPalette();
     window.addEventListener("keydown", onBootstrapKey);
     window.addEventListener("zhuangzi:open-command-palette", onBootstrapEvent);
     return () => {
       window.removeEventListener("keydown", onBootstrapKey);
       window.removeEventListener("zhuangzi:open-command-palette", onBootstrapEvent);
     };
-  }, [paletteMounted]);
+  }, [paletteMounted, loadPalette]);
 
   // 滚动吸顶柔光阴影（设计升级规范五.1）：吸顶静止时透明无影，
   // 滚动后挂超微柔光阴影，区分导航与正文，不喧宾夺主。
@@ -439,7 +438,7 @@ function NavigationContent() {
           </div>
         </div>
       )}
-      {paletteMounted && <CommandPalette initialOpen />}
+      {CommandPalette && <CommandPalette initialOpen />}
     </header>
   );
 }

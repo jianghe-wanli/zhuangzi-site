@@ -1,13 +1,11 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 
+import { useLazyComponent } from "@/lib/use-lazy-component";
+
 // 面板本体只在首次按下 ？ 时下载；常驻的只有下面这个按键监听
-const ShortcutsHelpPanel = dynamic(() => import("./ShortcutsHelpPanel"), {
-  ssr: false,
-  loading: () => null,
-});
+const loadPanel = () => import("./ShortcutsHelpPanel");
 
 /**
  * 快捷键帮助面板（按 ？ 唤出，GitHub/Gmail 式）。
@@ -18,6 +16,7 @@ const ShortcutsHelpPanel = dynamic(() => import("./ShortcutsHelpPanel"), {
  */
 export default function ShortcutsHelp() {
   const [open, setOpen] = useState(false);
+  const [Panel, load] = useLazyComponent(loadPanel);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -30,6 +29,7 @@ export default function ShortcutsHelp() {
       // 无修饰键的 ？ 切换面板；输入状态下不触发
       if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey && !typing) {
         e.preventDefault();
+        load();
         setOpen((v) => !v);
       } else if (e.key === "Escape") {
         setOpen(false);
@@ -37,7 +37,7 @@ export default function ShortcutsHelp() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [load]);
 
-  return open ? <ShortcutsHelpPanel onClose={() => setOpen(false)} /> : null;
+  return open && Panel ? <Panel onClose={() => setOpen(false)} /> : null;
 }

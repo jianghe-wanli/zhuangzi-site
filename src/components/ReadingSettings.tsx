@@ -1,18 +1,17 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 
 import { JIAZHU_MODE_KEY, readingCssValue, readReadingPrefs } from "@/lib/reading-prefs";
+import { useLazyComponent } from "@/lib/use-lazy-component";
 
 // 面板（约 8KB 源码 + 设置逻辑）只在读者首次点开时下载，不进共享 JS
 const loadPanel = () => import("./ReadingSettingsPanel");
-const ReadingSettingsPanel = dynamic(loadPanel, { ssr: false, loading: () => null });
 
 export default function ReadingSettings() {
   const [open, setOpen] = useState(false);
   // 首次打开后保持挂载：面板内的音效引擎与选择状态要跨开合保留
-  const [activated, setActivated] = useState(false);
+  const [Panel, load] = useLazyComponent(loadPanel);
   const close = useCallback(() => setOpen(false), []);
 
   // 排版偏好已由 <head> 内联脚本在首帧前写好（见 @/lib/reading-prefs）；
@@ -33,7 +32,7 @@ export default function ReadingSettings() {
       <button
         type="button"
         onClick={() => {
-          setActivated(true);
+          load();
           setOpen(!open);
         }}
         // 悬停 / 聚焦即预取面板 chunk，点击时基本已就绪
@@ -49,7 +48,7 @@ export default function ReadingSettings() {
         </svg>
       </button>
 
-      {activated && <ReadingSettingsPanel open={open} onClose={close} />}
+      {Panel && <Panel open={open} onClose={close} />}
     </div>
   );
 }
