@@ -127,6 +127,12 @@ jobs:
           # 体积/时间预算与分类得分断言合在一个文件里（LHCI 的 budgetsFile 与 assertions 互斥）。
           # 得分只设宽松下限：无障碍/SEO ≥ 0.95、最佳实践 ≥ 0.9 失败；性能 < 0.6 仅警告。
           # 计时类取 3 次里最好的一次，避免 Runner 抖动误报。
+          # 门槛口径（逍遥游页，serve@14 + 文泉驿回退字体实测）：
+          # · 样式表 26 KB / 文档 100 KB：@font-face 声明已从每页 HTML 挪进共享样式表
+          #   （样式表 16.6→24.5 KB，文档 50.8→34.5 KB，合计更小且跨页缓存），预算随之平移并收紧文档。
+          # · LCP 3300 ms：Lantern 模拟把「首帧上屏前已开始求值的 async 脚本」整体计为阻塞。
+          #   本地零延迟下脚本求值与首帧上屏只差几毫秒，落在哪一侧会让模拟值在 2.7–3.15 s 间跳变
+          #   （实测首帧并未变慢），门槛按含脚本的口径留 5% 余量。
           configPath: ./.github/lighthouserc.json
           uploadArtifacts: true
           temporaryPublicStorage: true
