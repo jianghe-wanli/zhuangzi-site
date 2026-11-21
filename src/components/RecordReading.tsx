@@ -2,6 +2,7 @@
 
 import { useCallback,useEffect, useRef } from "react";
 
+import { beginAnchorJump } from "@/lib/anchor-jump";
 import { subscribeCurrentPassage } from "@/lib/passage-dom";
 import { restoreProgress,saveProgress } from "@/lib/reading-progress";
 
@@ -47,8 +48,8 @@ export default function RecordReading({ chapterId, chapterTitle }: Props) {
 
     // 地址带 #passage-… 锚点（搜索结果、名句、复制的段落链接）时锚点优先，不恢复上次进度。
     // 浏览器的原生锚点滚动发生在 content-visibility:auto 的段落按估算高度占位时，
-    // 前面的段落渲染出真实高度后目标会被推走（实测齐物论第 6 节偏出 3000px）——
-    // 布局稳定后重新对齐，连做两帧。
+    // 前面的段落渲染出真实高度后目标会被推走（实测齐物论第 6 节偏出 3000px，
+    // 逍遥游 #chapter-conclusion 偏出 4000px）—— 先让全部段落按真实高度排版再对齐，连做两帧。
     // 同一个锚点只在首次到达时对齐；之后回到本页（后退等）仍按上次阅读进度恢复。
     let target: HTMLElement | null = null;
     const mark = chapterId + window.location.hash;
@@ -66,6 +67,7 @@ export default function RecordReading({ chapterId, chapterTitle }: Props) {
         restoreProgress(chapterId);
         return;
       }
+      beginAnchorJump();
       target?.scrollIntoView({ behavior: "instant", block: "start" });
       raf2 = requestAnimationFrame(() => target?.scrollIntoView({ behavior: "instant", block: "start" }));
     });

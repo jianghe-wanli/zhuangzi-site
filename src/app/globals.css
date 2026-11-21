@@ -589,6 +589,14 @@ html.vertical-mode .cv-auto {
   contain-intrinsic-size: none;
 }
 
+/* 页内锚点平滑滚动期间按真实高度排版，终点才不会被途经段落推走（src/lib/anchor-jump.ts）。
+   contain 与 content-visibility:auto 渲染时隐含的一致：少了它子元素外边距会穿出容器，
+   各段高度与按需排版时差几十 px，恢复按需排版的一刻页面又会跳一下 */
+html[data-anchor-jump] .cv-auto {
+  content-visibility: visible;
+  contain: layout style paint;
+}
+
 /* ============================================
    Animation Utilities
    ============================================ */

@@ -299,6 +299,27 @@ async function main() {
     await hydrated();
     if (!(await evaluate(`document.body.innerText.includes("北冥有鱼")`))) fail("篇章正文缺失");
 
+    // 4b. 页内锚点：平滑滚动途中下方懒渲染段落会撑高页面，终点必须仍落在目标上
+    step("篇章页「阅览篇末总结」跳转到位");
+    current = "页内锚点";
+    await evaluate(`document.querySelector('a[href="#chapter-conclusion"]').click()`);
+    const settled = () =>
+      evaluate(`(() => {
+        const top = document.getElementById("chapter-conclusion").getBoundingClientRect().top;
+        return { top: Math.round(top), y: Math.round(scrollY), jumping: document.documentElement.hasAttribute("data-anchor-jump") };
+      })()`);
+    let pos = await settled();
+    for (let last = NaN, stable = 0; stable < 5 || pos.jumping; ) {
+      await sleep(100);
+      pos = await settled();
+      stable = pos.y === last ? stable + 1 : 0;
+      last = pos.y;
+      if (stable > 60) break;
+    }
+    if (pos.y === 0) fail("点击「阅览篇末总结」后页面没有滚动");
+    if (pos.top < 0 || pos.top > 200) fail(`「阅览篇末总结」停在距目标 ${pos.top}px 处，期望目标位于视口顶部附近`);
+    if (pos.jumping) fail("滚动结束后 html[data-anchor-jump] 没有清除");
+
     step("概念页");
     await goto(CONCEPT, "概念页");
     await expectH1(/^道/);
