@@ -117,6 +117,9 @@ export default function SelectionPopover({ chapterId, chapterTitle }: SelectionP
       }, 50);
     };
 
+    // 本组件在首次选中文字后才被加载：挂载时选区已经存在，补处理一次
+    onSelectionEnd();
+
     document.addEventListener("mouseup", onSelectionEnd);
     document.addEventListener("touchend", onSelectionEnd);
     document.addEventListener("keyup", onSelectionEnd);

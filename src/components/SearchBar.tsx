@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect,useMemo,useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 interface ChapterMetaLite {
   id: string;
@@ -43,11 +43,11 @@ export default function SearchBar({ compact = false, initialValue = "" }: { comp
   const [chapters, setChapters] = useState<ChapterMetaLite[]>([]);
   const [quotes, setQuotes] = useState<QuoteLite[]>([]);
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
   const dataRequested = useRef(false);
-  const listId = "search-suggestions";
-
-
+  // useId：同页出现多个搜索框时 listbox / option 的 id 不冲突
+  const uid = useId();
+  const listId = `${uid}-list`;
+  const optionId = (i: number) => `${uid}-opt-${i}`;
 
   const prevInitRef = useRef(initialValue);
 
@@ -134,6 +134,8 @@ export default function SearchBar({ compact = false, initialValue = "" }: { comp
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // 输入法组字期间的方向键 / Esc 属于候选词窗口，不能劫持
+    if (e.nativeEvent.isComposing) return;
     if (!open || suggestions.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -158,6 +160,7 @@ export default function SearchBar({ compact = false, initialValue = "" }: { comp
         {/* Search icon */}
         <svg
           className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] z-10"
+          aria-hidden="true"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -171,14 +174,15 @@ export default function SearchBar({ compact = false, initialValue = "" }: { comp
         </svg>
 
         <input
-          ref={inputRef}
-          type="text"
+          type="search"
+          enterKeyHint="search"
+          autoComplete="off"
           value={query}
           role="combobox"
           aria-expanded={showList}
-          aria-controls={listId}
+          aria-controls={showList ? listId : undefined}
           aria-autocomplete="list"
-          aria-activedescendant={activeIndex >= 0 ? suggestions[activeIndex]?.id : undefined}
+          aria-activedescendant={showList && activeIndex >= 0 ? optionId(activeIndex) : undefined}
           onChange={(e) => {
             setQuery(e.target.value);
             ensureData();
@@ -217,38 +221,42 @@ export default function SearchBar({ compact = false, initialValue = "" }: { comp
           className="absolute left-0 right-0 top-full mt-2 z-50 max-h-80 overflow-y-auto rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] shadow-lg py-1.5 text-left"
         >
           {suggestions.map((s, i) => (
-            <li key={s.id} role="option" aria-selected={i === activeIndex}>
-              <button
-                type="button"
-                // mousedown 先于 input blur，保证点击选项时不被 onBlur 关闭
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => go(s.href)}
-                onMouseEnter={() => setActiveIndex(i)}
-                className={`w-full px-4 py-2.5 flex items-center gap-3 transition-colors ${
-                  i === activeIndex ? "bg-[var(--hover-bg)]" : "hover:bg-[var(--hover-bg)]"
+            // option 自身即可点击目标：role=option 内不得再嵌套 button
+            // （嵌套交互控件会让读屏读不出选项内容）
+            <li
+              key={s.id}
+              id={optionId(i)}
+              role="option"
+              aria-selected={i === activeIndex}
+              // mousedown 先于 input blur，保证点击选项时不被 onBlur 关闭
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => go(s.href)}
+              onMouseEnter={() => setActiveIndex(i)}
+              className={`w-full px-4 py-2.5 flex items-center gap-3 cursor-pointer transition-colors ${
+                i === activeIndex ? "bg-[var(--hover-bg)]" : "hover:bg-[var(--hover-bg)]"
+              }`}
+            >
+              <span
+                className={`shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium tracking-wider ${
+                  s.type === "chapter"
+                    ? "bg-[var(--text-accent)]/10 text-[var(--text-accent)]"
+                    : "bg-[var(--color-accent-gold)]/10 text-[var(--color-accent-gold)]"
                 }`}
+                aria-hidden="true"
               >
-                <span
-                  className={`shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium tracking-wider ${
-                    s.type === "chapter"
-                      ? "bg-[var(--text-accent)]/10 text-[var(--text-accent)]"
-                      : "bg-[var(--color-accent-gold)]/10 text-[var(--color-accent-gold)]"
-                  }`}
-                >
-                  {s.type === "chapter" ? "篇" : "句"}
+                {s.type === "chapter" ? "篇" : "句"}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm text-[var(--text-primary)] font-serif truncate">
+                  {s.label}
                 </span>
-                <span className="flex-1 min-w-0">
-                  <span className="block text-sm text-[var(--text-primary)] font-serif truncate">
-                    {s.label}
-                  </span>
-                  <span className="block text-xs text-[var(--text-muted)] truncate">
-                    {s.sub}
-                  </span>
+                <span className="block text-xs text-[var(--text-muted)] truncate">
+                  {s.sub}
                 </span>
-              </button>
+              </span>
             </li>
           ))}
-          <li className="px-4 pt-1.5 pb-0.5 border-t border-[var(--border-light)] mt-1">
+          <li role="presentation" className="px-4 pt-1.5 pb-0.5 border-t border-[var(--border-light)] mt-1">
             <span className="text-xs text-[var(--text-muted)]">
               回车查看「{query.trim()}」全文检索结果 →
             </span>

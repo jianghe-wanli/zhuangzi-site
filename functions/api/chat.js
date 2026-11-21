@@ -25,7 +25,9 @@ const LIMITS = {
   maxCharsPerMessage: 8_000,
   maxTotalChars: 40_000,
   maxTokensCap: 2_048,
-  upstreamTimeoutMs: 60_000,
+  upstreamTimeoutMs: 60_000, // 等上游响应头（非流式：含读完正文）
+  streamIdleTimeoutMs: 30_000, // 流式：相邻两块之间的最长静默
+  streamMaxDurationMs: 300_000, // 流式：整条流的最长时长
 };
 
 // ── 限流 ──
@@ -60,19 +62,72 @@ async function checkRateLimit(ip) {
   }
 }
 
-function jsonError(message, status) {
-  return new Response(JSON.stringify({ error: message }), {
+// public/_headers 不作用于 Functions 的响应，安全头必须在这里自己带上。
+const BASE_HEADERS = {
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
+  "X-Robots-Tag": "noindex",
+  "Referrer-Policy": "no-referrer",
+  "Cross-Origin-Resource-Policy": "same-origin",
+};
+
+function json(data, status = 200, extraHeaders = {}) {
+  return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff",
-    },
+    headers: { "Content-Type": "application/json; charset=utf-8", ...BASE_HEADERS, ...extraHeaders },
   });
 }
 
+function jsonError(message, status, extraHeaders) {
+  return json({ error: message }, status, extraHeaders);
+}
+
+/**
+ * 按**字节**读请求体并设上限。
+ * 原实现先 request.text() 整体读入、再用 raw.length 比较：length 是 UTF-16 码元数，
+ * 中文每字 3 字节，实际放行的是 128KB 的 3 倍；且不带 Content-Length（chunked）
+ * 的请求会被完整缓冲后才检查。这里边读边数，超限立即停止。
+ * 返回 null 表示超限。
+ */
+async function readBodyCapped(request, maxBytes) {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    merged.set(c, offset);
+    offset += c.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(merged);
+}
+
+/** 取有限数值并夹紧；非数值（undefined / NaN / 字符串垃圾）用默认值。 */
+function clampNumber(value, fallback, min, max) {
+  const n = typeof value === "number" ? value : Number.NaN;
+  return Math.min(Math.max(Number.isFinite(n) ? n : fallback, min), max);
+}
+
+// key 会进 Authorization 头：只接受可见 ASCII，拒绝空白 / 换行 / 非 ASCII，
+// 否则 fetch 抛 TypeError，用户只会看到莫名的「服务暂时不可用」。
+const KEY_PATTERN = /^[\x21-\x7E]{8,256}$/;
+
 /** 只接受来自本站页面的请求，杜绝被当作公开中继。 */
 function isSameOrigin(request) {
+  // 现代浏览器都会带 Sec-Fetch-Site，且页面脚本无法伪造；带了就必须是 same-origin
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite && fetchSite !== "same-origin") return false;
   const self = new URL(request.url).origin;
   const origin = request.headers.get("origin");
   if (origin) return origin === self;
@@ -109,10 +164,10 @@ export async function onRequest(context) {
 
   if (request.method === "OPTIONS") {
     // 同源使用，无需放开跨域；显式回 405 之外给出允许的方法
-    return new Response(null, { status: 204, headers: { Allow: "POST" } });
+    return new Response(null, { status: 204, headers: { Allow: "POST", ...BASE_HEADERS } });
   }
   if (request.method !== "POST") {
-    return jsonError("Method not allowed", 405);
+    return jsonError("Method not allowed", 405, { Allow: "POST" });
   }
   if (!isSameOrigin(request)) {
     return jsonError("仅允许本站页面调用", 403);
@@ -130,29 +185,29 @@ export async function onRequest(context) {
 
   const ip = request.headers.get("cf-connecting-ip") || "unknown";
   if (!(await checkRateLimit(ip))) {
-    return new Response(JSON.stringify({ error: "请求太频繁，请稍后再试" }), {
-      status: 429,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-        "Retry-After": String(RATE.windowSec),
-      },
-    });
+    return jsonError("请求太频繁，请稍后再试", 429, { "Retry-After": String(RATE.windowSec) });
   }
 
   let body;
   try {
-    const raw = await request.text();
-    if (raw.length > LIMITS.maxBodyBytes) return jsonError("请求体过大", 413);
+    const raw = await readBodyCapped(request, LIMITS.maxBodyBytes);
+    if (raw === null) return jsonError("请求体过大", 413);
     body = JSON.parse(raw);
   } catch {
     return jsonError("请求体不是合法 JSON", 400);
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return jsonError("请求体不是合法 JSON", 400);
+  }
 
-  const { messages, key, stream, model } = body ?? {};
+  const { messages, stream, model } = body;
+  const key = typeof body.key === "string" ? body.key.trim() : "";
 
-  if (typeof key !== "string" || !key.trim()) {
+  if (!key) {
     return jsonError("请先设置 DeepSeek API Key", 401);
+  }
+  if (!KEY_PATTERN.test(key)) {
+    return jsonError("API Key 格式不正确", 401);
   }
   const invalid = validateMessages(messages);
   if (invalid) return jsonError(invalid, 400);
@@ -162,23 +217,40 @@ export async function onRequest(context) {
   }
 
   // 客户端可调的采样参数一律夹紧到安全区间，避免成本放大
-  const maxTokens = Math.min(
-    Math.max(Number(body.maxTokens) || 512, 1),
-    LIMITS.maxTokensCap
-  );
-  const temperature = Math.min(Math.max(Number(body.temperature) ?? 0.7, 0), 2);
+  // 原写法 `Number(body.temperature) ?? 0.7`：缺省时 Number(undefined) 是 NaN，
+  // ?? 拦不住 NaN，序列化后上游收到的是 temperature: null。
+  const maxTokens = Math.floor(clampNumber(body.maxTokens, 512, 1, LIMITS.maxTokensCap));
+  const temperature = clampNumber(body.temperature, 0.7, 0, 2);
 
   const payload = {
     model: model && ALLOWED_MODELS.has(model) ? model : DEFAULT_MODEL,
-    messages,
+    // 只转发 role / content，丢弃客户端夹带的其他字段（name、tool_calls…）
+    messages: messages.map((m) => ({ role: m.role, content: m.content })),
     max_tokens: maxTokens,
     temperature,
     stream: stream === true,
   };
 
-  // 上游超时保护：Workers 请求本身有时限，但显式 abort 能让我们回可读错误
+  // 上游中止的三个来源，共用一个 controller：
+  //   1) 超时（等响应头 / 流式静默 / 流式总时长）
+  //   2) 客户端断开（request.signal）—— 否则上游会继续生成并计费到用户的 key 上
+  //   3) 下游取消读取（ReadableStream.cancel）
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LIMITS.upstreamTimeoutMs);
+  let timedOut = false;
+  const abortForTimeout = () => {
+    timedOut = true;
+    controller.abort();
+  };
+  const onClientAbort = () => controller.abort();
+  const clientSignal = request.signal;
+  if (clientSignal?.aborted) return jsonError("请求已取消", 499);
+  let timer = setTimeout(abortForTimeout, LIMITS.upstreamTimeoutMs);
+  clientSignal?.addEventListener("abort", onClientAbort, { once: true });
+  const cleanup = () => {
+    clearTimeout(timer);
+    clientSignal?.removeEventListener("abort", onClientAbort);
+  };
+  let handedOff = false; // 流式响应交出去之后，由流自己负责 cleanup
 
   try {
     const response = await fetch(DEEPSEEK_URL, {
@@ -198,21 +270,59 @@ export async function onRequest(context) {
       const message =
         status === 401 || status === 403
           ? "API Key 无效或无权限"
-          : status === 429
-            ? "上游限流，请稍后再试"
-            : status >= 500
-              ? "上游服务暂时不可用"
-              : "请求被上游拒绝";
-      return jsonError(message, status);
+          : status === 402
+            ? "DeepSeek 账户余额不足"
+            : status === 429
+              ? "上游限流，请稍后再试"
+              : status >= 500
+                ? "上游服务暂时不可用"
+                : "请求被上游拒绝";
+      // 上游 5xx 统一回 502，避免把上游的任意状态码（如 Cloudflare 的 52x）透传出去
+      return jsonError(message, status >= 500 ? 502 : status);
     }
 
     // ── 流式：直接转发 SSE ──
     if (payload.stream) {
-      return new Response(response.body, {
+      if (!response.body) return jsonError("上游服务暂时不可用", 502);
+      const reader = response.body.getReader();
+      const deadline = Date.now() + LIMITS.streamMaxDurationMs;
+      handedOff = true;
+      // 用 pull 而不是直接转交 response.body：
+      // - 背压：下游读一块才向上游要一块，慢客户端不会让数据在函数里堆积
+      // - 每块重置静默计时；超时 / 客户端断开都会中止上游
+      const body = new ReadableStream({
+        async pull(streamController) {
+          clearTimeout(timer);
+          const budget = Math.min(LIMITS.streamIdleTimeoutMs, deadline - Date.now());
+          if (budget <= 0) {
+            abortForTimeout();
+          } else {
+            timer = setTimeout(abortForTimeout, budget);
+          }
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              cleanup();
+              streamController.close();
+              return;
+            }
+            streamController.enqueue(value);
+          } catch {
+            cleanup();
+            // 不透传上游错误细节；流被异常终止，客户端按网络错误处理
+            streamController.error(new Error(timedOut ? "upstream timeout" : "upstream aborted"));
+          }
+        },
+        cancel(reason) {
+          cleanup();
+          controller.abort();
+          return reader.cancel(reason).catch(() => undefined);
+        },
+      });
+      return new Response(body, {
         headers: {
           "Content-Type": "text/event-stream; charset=utf-8",
-          "Cache-Control": "no-store",
-          Connection: "keep-alive",
+          ...BASE_HEADERS,
           "X-Accel-Buffering": "no",
         },
       });
@@ -222,16 +332,13 @@ export async function onRequest(context) {
     const data = await response.json();
     const content = data?.choices?.[0]?.message?.content || "吾默然。";
 
-    return new Response(JSON.stringify({ content }), {
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-      },
-    });
-  } catch (err) {
-    if (err?.name === "AbortError") return jsonError("上游响应超时", 504);
+    return json({ content });
+  } catch {
+    if (timedOut) return jsonError("上游响应超时", 504);
+    // 客户端已断开：响应没人收，状态码只用于日志（499 = client closed request）
+    if (clientSignal?.aborted) return jsonError("请求已取消", 499);
     return jsonError("服务暂时不可用", 502);
   } finally {
-    clearTimeout(timer);
+    if (!handedOff) cleanup();
   }
 }

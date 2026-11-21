@@ -12,7 +12,7 @@
  *
  * 运行：node scripts/gen-og-images.mjs（已接入 npm run build）
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname,join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,6 +24,8 @@ const OUT = join(ROOT, "public", "og");
 
 const W = 1200;
 const H = 630;
+/** 摘要单行：30px 字号、左右各留 64px，最多放 35 个全角字（原先 40 会画出右边界被裁掉） */
+const SUMMARY_MAX_CHARS = 35;
 
 /** XML 转义（标题/摘要会含引号、书名号等） */
 function esc(s) {
@@ -64,7 +66,7 @@ function svgTemplate({ badge, title, summary, footer }) {
   <text x="64" y="300" font-family="'Noto Serif CJK SC','Source Han Serif SC','SimSun','Microsoft YaHei',serif" font-size="96" font-weight="700" fill="#2A2218">${esc(title)}</text>
   <rect x="66" y="330" width="140" height="6" rx="3" fill="url(#accent)"/>
   <!-- 摘要 -->
-  <text x="64" y="400" font-family="'Noto Serif CJK SC','Source Han Serif SC','SimSun','Microsoft YaHei',serif" font-size="30" fill="#7A6B5D">${esc(clamp(summary, 40))}</text>
+  <text x="64" y="400" font-family="'Noto Serif CJK SC','Source Han Serif SC','SimSun','Microsoft YaHei',serif" font-size="30" fill="#7A6B5D">${esc(clamp(summary, SUMMARY_MAX_CHARS))}</text>
   <!-- 页脚 -->
   <text x="64" y="${H - 36}" font-family="'Noto Serif CJK SC','Source Han Serif SC','SimSun','Microsoft YaHei',serif" font-size="22" fill="#A89880" letter-spacing="4">${esc(footer)}</text>
 </svg>`;
@@ -76,7 +78,18 @@ const concepts = JSON.parse(readFileSync(join(DATA, "concepts", "index.json"), "
 mkdirSync(join(OUT, "chapters"), { recursive: true });
 mkdirSync(join(OUT, "concepts"), { recursive: true });
 
-let count = 0;
+/**
+ * 256 色调色板 PNG：OG 图只有浅色渐变底 + 两段棕色渐变 + 文字，真彩 RGBA 每张约 67KB
+ * （60 张 4.0MB，占 out/ 近一成）。实测对比：
+ *   - 真彩 + compressionLevel 9：仅 -4%；
+ *   - 256 色（libimagequant，默认抖动）：约 -55%，渐变仍平滑；
+ *   - 64 色：不抖动时顶部渐变条断成色块，抖动后反而更大 —— 不取。
+ * 注意 sharp 里只要传了 effort / colours / dither 就会隐式开启 palette。
+ */
+const PNG_OPTIONS = { palette: true, colours: 256, effort: 10 };
+const render = (svg, file) => sharp(Buffer.from(svg)).resize(W, H).png(PNG_OPTIONS).toFile(file);
+
+const jobs = [];
 
 for (const ch of chapters) {
   const svg = svgTemplate({
@@ -85,8 +98,7 @@ for (const ch of chapters) {
     summary: ch.summary,
     footer: `${ch.category} · 第${ch.order}篇 · ${ch.passageCount}节`,
   });
-  await sharp(Buffer.from(svg)).resize(W, H).png().toFile(join(OUT, "chapters", `${ch.id}.png`));
-  count++;
+  jobs.push(render(svg, join(OUT, "chapters", `${ch.id}.png`)));
 }
 
 for (const c of concepts) {
@@ -96,9 +108,8 @@ for (const c of concepts) {
     summary: c.summary,
     footer: "核心概念",
   });
-  await sharp(Buffer.from(svg)).resize(W, H).png().toFile(join(OUT, "concepts", `${c.id}.png`));
-  count++;
+  jobs.push(render(svg, join(OUT, "concepts", `${c.id}.png`)));
 }
 
-console.log(`[gen-og-images] 已生成 ${count} 张 OG 图 → public/og/`);
-writeFileSync(join(ROOT, "public", "og", ".gitkeep"), "", "utf8");
+await Promise.all(jobs);
+console.log(`[gen-og-images] 已生成 ${jobs.length} 张 OG 图 → public/og/`);

@@ -31,6 +31,8 @@ Next.js 的 metadata 向下继承，导致所有未在自身 `generateMetadata` 
 
 修复：根布局不再声明 canonical；新增 `buildPageMetadata()`；
 为 15 个 `"use client"` 路由补 `layout.tsx` 提供各自 metadata。
+（后续：这些 metadata 已并入各自的 `page.tsx`，一次性生成器
+`scripts/gen-route-metadata.mjs` 随之删除。）
 
 | 指标 | 修复前 | 修复后 |
 | --- | --- | --- |
@@ -187,6 +189,8 @@ Next.js 的 metadata 向下继承，导致所有未在自身 `generateMetadata` 
   `.gitignore` 规则对已跟踪文件无效，需手动执行：
   `git rm --cached _qiwu_data.json _updates_0*.json updates_json/*.json`
   （已在 `.gitignore` 注释中写明命令；未代为执行以免改动版本库状态）。
+  → ✅ 已删除（确认全仓无引用），`scripts/data/` 与 `archive/` 下 9 个逐字节相同的
+  重复脚本一并清理。
 
 > 仍存的结构性弱点：用户密钥途经本站。根治需改架构，见「🔷 三·1」。
 
@@ -394,27 +398,21 @@ localStorage 里的明文密钥。
 
 ### 2. CSP 收紧
 
-现为 `script-src 'self' 'unsafe-inline'`。第二轮已补齐其余指令
-（`worker-src`/`manifest-src`/`frame-src`/`upgrade-insecure-requests`）
-并合并了重复的 `/*` 区块，但 `'unsafe-inline'` **仍无法移除**，原因是：
+**script-src：已落地（每页 hash）。** 静态 `_headers` 无法按页列 hash，也发不了 nonce；
+改由 `scripts/inject-csp-meta.mjs` 在构建后为每个 HTML 计算其全部可执行内联脚本的
+sha256，注入每页 `<meta http-equiv="Content-Security-Policy">`。浏览器对响应头与
+meta 两条策略取交集，所以响应头里虽然还写着 `'unsafe-inline'`（不能删，否则带 hash
+的脚本过不了响应头那一条），实际能执行的内联脚本只有构建时就在页面里的那些。
 
-* 防闪烁主题脚本必须**同步内联**执行，否则首帧会闪出默认配色；
-* 各页 JSON-LD 必须内联（`application/ld+json` 不支持外链 `src`），
-  而其内容**每页不同** → hash 无法穷举；
-* `_headers` 是静态文件，Cloudflare Pages 无法按请求下发 nonce。
+* hash 构建后现算，改主题脚本 / 新增内联脚本无需改配置；
+* 相邻的 `self.__next_f.push(...)` 载荷脚本先合并为一个，每页 hash 数从 30~57 降到约 5；
+* `check-output.mjs` 用另一套解析复算比对；`npm run smoke` 在真实 Chrome 里验证
+  首屏、客户端路由、404、离线页、SW 缓存回放均无违规，且运行时注入的内联脚本会被拦下。
 
-可行的收紧路径（按代价排序）：
+**style-src：不可收紧。** 产物里有 1355 处 `style="…"` 属性（React 行内样式），hash
+不适用于属性；styled-jsx / Leaflet 运行时还会插入 `<style>`。
 
-1. 把主题脚本改为**外部文件** + 其 sha256 hash 入 CSP，
-   JSON-LD 则改由构建期为每个页面目录生成独立 `_headers` 规则
-   （Cloudflare `_headers` 支持按路径匹配，可为每个路由写各自的 hash）。
-2. 或改用 Cloudflare Workers（而非纯静态 Pages）下发 per-request nonce。
-3. 现阶段的缓解措施：全站进入 `dangerouslySetInnerHTML` 的内容
-   统一走 `src/lib/markup.ts` 的 `renderEmphasis()`（先转义再还原粗体），
-   已消除唯一的未转义注入通道。
-
-另可考虑 `style-src` 去掉 `'unsafe-inline'`（Next.js 的 hydration 内联样式
-是主要障碍，需实测），以及加 CSP report 端点收集违规。
+**违规上报：不做。** 本站没有可接收并留存报告的后端。
 
 ### 3. 检索质量
 
@@ -448,6 +446,31 @@ localStorage 里的明文密钥。
 * 仓库根有已被 git 跟踪的散落数据文件（`_qiwu_data.json`、
   `_updates_02..07.json`、`updates_json/`）；`.gitignore` 的
   `_updates_*.json` 规则对已跟踪文件无效，需 `git rm --cached`。
+  → ✅ 已删除。
+
+---
+
+## 三·补 工程与交付二次审计（实测后修复）✅
+
+以下问题均在构建产物或 `wrangler pages dev` 上复现后修复：
+
+| 问题 | 证据 | 处理 |
+| --- | --- | --- |
+| CI 部署不带边缘函数 | deploy job 只下载 `out/`，工作目录无 `functions/` | 稀疏检出 `functions/` 与 `wrangler.toml` |
+| 未带哈希的文件被标一年 `immutable` | `/*.png`、`/*.woff2` 规则命中 OG 图、图标、字体分片 | 短 `max-age` + `stale-while-revalidate` |
+| `_redirects` 的 404 规则无效 | wrangler：`Valid status codes are 200, 301…  Got 404` | 删除（Pages 自动回退 404.html） |
+| `/*.html`、`/api/*` 头规则不生效 | 页面地址不以 `.html` 结尾；`_headers` 不作用于 Functions | 删除；头改在函数内设置 |
+| SW 响应等缓存落盘 | `await cache.put()` 后才 `return` | 改 `event.waitUntil` |
+| SW 离线兜底会被淘汰 / 不可用 | 兜底页与页面同缓存 FIFO 裁剪；`/404.html` 在 Pages 上是 308 | 独立 `/offline/` + 独立缓存 |
+| SW 每次发版清空哈希资源 | 所有缓存名都带 build ID | `/_next/static/*` 进无版本缓存 |
+| 客户端导航过的页面离线不可回访 | RSC `.txt` 未缓存 | 新增 RSC Network-First 缓存 |
+| `/api/chat` 体积上限按字符计 | 15 万字节的中文请求体通过了 128KB 限制 | 按字节流式计数 |
+| `/api/chat` 缺省 `temperature` 为 `null` | `Number(undefined) ?? 0.7` → `NaN` | 有限数值夹紧 |
+| robots.txt 屏蔽 noindex 页 | `/search/` 等 6 条 Disallow 与页面 noindex 并存 | 只 Disallow `/api/` |
+| manifest 色值过期 | `#8B5E3C` vs theme.ts `#8E5431` | 对齐并加测试 |
+| 体积门禁形同虚设 | `budget.json` 只写不读；预算高出实测 15–50% | 相对基线 5% 门禁 |
+| 体积口径虚高 | `noModule` polyfill 38.6KB 被计入每个路由 | 排除 |
+| OG 图偏大且摘要被裁 | 60 张 4.00MB；40 个全角字 × 30px = 1200px 超出画布 | 256 色调色板 → 1.78MB；截断 35 字 |
 
 ---
 

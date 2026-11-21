@@ -9,11 +9,12 @@
  *
  * 规则：只允许「一简对一繁」的无歧义映射；一简对多繁的字一律不转换。
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync,readFileSync } from "node:fs";
 import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { TRAD_MAP, SIMP_MAP, AMBIGUOUS_EXCLUDED } from "@/data/trad-map";
+import { AMBIGUOUS_EXCLUDED,SIMP_MAP, TRAD_MAP } from "@/data/trad-map";
 
 describe("简繁映射表", () => {
   it("非空且规模合理", () => {

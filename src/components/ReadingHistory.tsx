@@ -13,11 +13,23 @@ interface HistoryItem {
 const STORAGE_KEY = "reading_history";
 const MAX_ITEMS = 10;
 
+/** 读取并校验：存储被手动改坏 / 旧版本格式时返回空数组而不是让调用方崩溃 */
+export function getReadingHistory(): HistoryItem[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (h): h is HistoryItem =>
+        !!h && typeof h.chapterId === "string" && typeof h.chapterTitle === "string"
+    );
+  } catch {
+    return [];
+  }
+}
+
 export function recordReading(chapterId: string, chapterTitle: string) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const history: HistoryItem[] = raw ? JSON.parse(raw) : [];
-    const filtered = history.filter((h) => h.chapterId !== chapterId);
+    const filtered = getReadingHistory().filter((h) => h.chapterId !== chapterId);
     filtered.unshift({
       chapterId,
       chapterTitle,
@@ -27,15 +39,6 @@ export function recordReading(chapterId: string, chapterTitle: string) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered.slice(0, MAX_ITEMS)));
     window.dispatchEvent(new Event("reading-recorded"));
   } catch {}
-}
-
-export function getReadingHistory(): HistoryItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
 }
 
 export default function ReadingHistoryWidget() {
@@ -62,8 +65,11 @@ export default function ReadingHistoryWidget() {
             最近阅读
           </h3>
           <button
+            type="button"
             onClick={() => {
-              localStorage.removeItem(STORAGE_KEY);
+              try {
+                localStorage.removeItem(STORAGE_KEY);
+              } catch {}
               setHistory([]);
             }}
             className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"

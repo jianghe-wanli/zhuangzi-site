@@ -3,17 +3,15 @@
 import { createContext, ReactNode,useCallback, useContext, useEffect, useState } from "react";
 
 import {
+  applyThemeToDocument,
   DEFAULT_THEME,
   isThemeName,
   THEME_STORAGE_KEY,
-  themeCssVarEntries,
   type ThemeName,
-  themes,
-} from "@/lib/theme";
+} from "@/lib/theme-meta";
 
-// 调色板已迁移至 @/lib/theme（单一数据源）。此处只负责状态与副作用。
-// 重新导出以兼容既有 import 点（ThemeSwitcher 等）。
-export { themes };
+// 调色板在 globals.css（由 @/lib/theme 生成）。此处只负责状态与副作用，
+// 且只依赖 theme-meta —— 不要 import "@/lib/theme"，会把调色板带进共享 JS。
 export type { ThemeName };
 
 interface ThemeContextType {
@@ -28,22 +26,6 @@ const ThemeContext = createContext<ThemeContextType>({
   setTheme: () => {},
   mounted: false,
 });
-
-/** 把主题写入 document —— 与 head 内联脚本使用完全相同的映射表 */
-function applyTheme(name: ThemeName) {
-  const root = document.documentElement;
-  for (const [cssVar, value] of themeCssVarEntries(name)) {
-    root.style.setProperty(cssVar, value);
-  }
-  const def = themes[name];
-  // 深色主题挂上 .dark：globals.css 的 .dark 规则（含 hero-gradient）由此生效。
-  root.classList.toggle("dark", def.dark);
-  // 让原生控件（滚动条、表单、日期选择器）跟随主题明暗
-  root.style.colorScheme = def.dark ? "dark" : "light";
-  document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", def.themeColor);
-}
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeName>(DEFAULT_THEME);
@@ -65,7 +47,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setThemeState(initial);
-    applyTheme(initial);
+    applyThemeToDocument(initial);
     setMounted(true);
   }, []);
 
@@ -82,7 +64,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       }
       const next: ThemeName = e.matches ? "yedu" : DEFAULT_THEME;
       setThemeState(next);
-      applyTheme(next);
+      applyThemeToDocument(next);
     };
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
@@ -90,7 +72,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((next: ThemeName) => {
     setThemeState(next);
-    applyTheme(next);
+    applyThemeToDocument(next);
     try {
       localStorage.setItem(THEME_STORAGE_KEY, next);
     } catch {

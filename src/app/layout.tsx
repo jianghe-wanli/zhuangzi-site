@@ -7,14 +7,16 @@ import Footer from "@/components/Footer";
 import Navigation from "@/components/Navigation";
 import ReadingProgress from "@/components/ReadingProgress";
 import ShortcutsHelp from "@/components/ShortcutsHelp";
+import StaticBlockPrefetch from "@/components/StaticBlockPrefetch";
 import SWRegister from "@/components/SWRegister";
-import { FONT_FACE_CSS } from "@/lib/font-faces";
+import { buildInlineReadingPrefsScript } from "@/lib/reading-prefs";
 import { canonicalUrl, OG_IMAGE, SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
 import { buildInlineThemeScript, DEFAULT_THEME, themes } from "@/lib/theme";
 
-// 字体改用系统字体栈（见 globals.css 的 :root 定义）。
-// 原因：next/font/google 会在构建时联网拉取 Google Fonts，在受限网络/CI 中
-// 必然失败导致 build 中断；且其只抓 latin 子集，中文本就回退到系统宋体。
+// 字体：系统字体栈 + 自托管分片宋体。@font-face 规则在 globals.css
+// （@import "./font-faces.css"）里，随外置样式表一次下载、跨页缓存；
+// 不要内联回 <head> —— 服务端组件的 props 会原样进 RSC 载荷，
+// 24KB 规则会在每个页面的 HTML 里出现两次。
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -155,11 +157,12 @@ export default function RootLayout({
         {/* Cloudflare Web Analytics — replace token to enable */}
         {/* <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "YOUR_TOKEN"}'></script> */}
 
-        {/* 自托管按字频分片宋体 @font-face（内联于 head，消除样式表二次往返并保持外置 CSS <= 20KB 预算） */}
-        <style dangerouslySetInnerHTML={{ __html: FONT_FACE_CSS }} />
-
-        {/* 防闪烁主题脚本：内容由 @/lib/theme 的调色板生成，不再手抄字面量 */}
-        <script dangerouslySetInnerHTML={{ __html: buildInlineThemeScript() }} />
+        {/* 首帧前同步执行：① 主题（写 <html data-theme>，调色板在 globals.css）
+            ② 阅读排版偏好（字号/行距/版心/夹注），避免水合后整体重排。
+            两段都只含构建期常量；每页要付两次（<script> + RSC），务必保持精简 */}
+        <script
+          dangerouslySetInnerHTML={{ __html: buildInlineThemeScript() + ";" + buildInlineReadingPrefsScript() }}
+        />
 
         <script
           type="application/ld+json"
@@ -182,11 +185,15 @@ export default function RootLayout({
         */}
         <Navigation />
         <ReadingProgress />
-        <main id="main-content" tabIndex={-1} className="flex-1 outline-none">{children}</main>
+        {/* min-h：主体至少占满导航以下的一屏，页脚初始必在首屏之外。
+            否则短页面（/search 等客户端渲染页）水合后内容长高，会把已在
+            视口内的页脚顶下去 —— Lighthouse 实测 /search CLS 0.089 全部来自页脚。 */}
+        <main id="main-content" tabIndex={-1} className="flex-1 min-h-[calc(100svh-3.5rem)] outline-none">{children}</main>
         <Footer />
         <ChatFab />
         <ShortcutsHelp />
         <SWRegister />
+        <StaticBlockPrefetch />
       </body>
     </html>
   );

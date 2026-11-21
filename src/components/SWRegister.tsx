@@ -40,7 +40,7 @@ function registerSW() {
     window.location.reload();
   });
 
-  window.addEventListener("load", () => {
+  const onLoad = () => {
     pageLoaded = true;
     // 延迟至首屏彻底空闲后再注册 SW，避免安装线程与首屏渲染争抢网络/主线程
     window.setTimeout(() => {
@@ -48,7 +48,11 @@ function registerSW() {
         // Silently fail — SW is progressive enhancement
       });
     }, 4000);
-  });
+  };
+  // useEffect 常在 load 事件之后才执行（hydration 晚于资源加载完成），
+  // 此时再监听 load 永远等不到，SW 就不会注册。
+  if (document.readyState === "complete") onLoad();
+  else window.addEventListener("load", onLoad, { once: true });
 }
 
 export default function SWRegister() {

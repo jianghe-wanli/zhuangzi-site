@@ -43,7 +43,8 @@ export default function ChatWithZhuangzi({
   const [showConfig, setShowConfig] = useState(false);
   const [keySaved, setKeySaved] = useState(false);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -54,12 +55,19 @@ export default function ChatWithZhuangzi({
 
   useEffect(() => {
     const saved = getApiKey();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 挂载后读 localStorage（hydration-safe）
     if (saved) setApiKey(saved);
   }, []);
 
+  // 新消息 / 流式增量到达时贴底。直接设 scrollTop：流式回复每秒几十个增量，
+  // 逐个 smooth scrollIntoView 会互相打断、持续占用主线程
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const log = logRef.current;
+    if (log) log.scrollTop = log.scrollHeight;
+  }, [messages, open]);
+
+  // 卸载时中止在途的流式请求
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   // 打开后把焦点移入输入框；关闭后归还给触发按钮（WCAG 2.4.3）
   useEffect(() => {
@@ -84,12 +92,14 @@ export default function ChatWithZhuangzi({
   // 处理外部传入的 initialQuestion 与 forceOpen
   useEffect(() => {
     if (forceOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 响应外部受控信号
       setOpen(true);
     }
   }, [forceOpen]);
 
   useEffect(() => {
     if (initialQuestion) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 响应外部受控信号
       setInput(initialQuestion);
       setOpen(true);
       requestAnimationFrame(() => {
@@ -151,7 +161,9 @@ export default function ChatWithZhuangzi({
   }, [open, showConfig, close]);
 
   const handleSaveApiKey = () => {
-    saveApiKey(apiKey);
+    const key = apiKey.trim(); // 粘贴时常带首尾空白，会导致鉴权失败
+    setApiKey(key);
+    saveApiKey(key);
     setShowConfig(false);
     setKeySaved(true);
     setTimeout(() => setKeySaved(false), 3000);
@@ -169,6 +181,7 @@ export default function ChatWithZhuangzi({
 
     try {
       if (!apiKey) {
+        setShowConfig(true); // 直接展开设置区，省去读者自己找齿轮按钮
         throw new Error("请先设置 DeepSeek API Key");
       }
 
@@ -195,6 +208,9 @@ export default function ChatWithZhuangzi({
         // Fall through without context
       }
 
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       // Stream reply — append chunks incrementally
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
@@ -213,13 +229,16 @@ export default function ChatWithZhuangzi({
             return copy;
           });
         },
-        { temperature: 0.7, maxTokens: 512 }
+        { temperature: 0.7, maxTokens: 512, signal: controller.signal }
       );
     } catch (err) {
-      setMessages((prev) => [...prev, {
-        role: "assistant",
-        content: `吾今不能应：${err instanceof Error ? err.message : "未知之误"}`,
-      }]);
+      const content = `吾今不能应：${err instanceof Error ? err.message : "未知之误"}`;
+      setMessages((prev) => {
+        // 流式占位气泡还是空的就原地替换，避免留下一个空白气泡
+        const last = prev[prev.length - 1];
+        const base = last?.role === "assistant" && last.content === "" ? prev.slice(0, -1) : prev;
+        return [...base, { role: "assistant", content }];
+      });
     } finally {
       setLoading(false);
     }
@@ -320,6 +339,7 @@ export default function ChatWithZhuangzi({
         aria-live="polite"
         aria-relevant="additions text"
         aria-label="对话记录"
+        ref={logRef}
         className="h-64 overflow-y-auto px-3 py-2 space-y-2"
       >
         {messages.map((msg, i) => (
@@ -330,7 +350,6 @@ export default function ChatWithZhuangzi({
             </span>
           </div>
         ))}
-        <div ref={bottomRef} />
       </div>
 
       {/* 加载与保存状态单独放 status region */}

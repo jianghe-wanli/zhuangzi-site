@@ -8,9 +8,20 @@
  * 调色板现已收敛到 src/lib/theme.ts 单一数据源，这组测试把
  * 「四个主题的文字对比度必须达 AA」固化下来，防止再次悄悄改坏。
  */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { buildInlineThemeScript,CSS_VAR_BY_KEY, themeNames, themes } from "@/lib/theme";
+import {
+  buildInlineThemeScript,
+  buildThemeCss,
+  CSS_VAR_BY_KEY,
+  THEME_CSS_END,
+  THEME_CSS_START,
+  themeNames,
+  themes,
+} from "@/lib/theme";
 
 /** sRGB 相对亮度（WCAG 2.x 定义） */
 function relativeLuminance(hex: string): number {
@@ -122,19 +133,28 @@ describe("主题系统完整性", () => {
     const script = buildInlineThemeScript();
     for (const name of themeNames) {
       expect(script).toContain(name);
+      expect(script).toContain(themes[name].themeColor);
     }
     // 内联进 <script> 时若出现 </script> 会提前闭合标签
     expect(script.toLowerCase()).not.toContain("</script");
-    expect(script).toContain("--text-muted");
+    // 调色板在样式表里，脚本每页都要付两次（<script> + RSC），必须保持精简
+    expect(script.length).toBeLessThan(700);
   });
 
-  it("内联脚本与 Provider 使用同一份取值（不再有第二份手抄副本）", () => {
-    const script = buildInlineThemeScript();
+  it("globals.css 的调色板区块与 theme.ts 逐字一致（唯一真值，不再有手抄副本）", () => {
+    const css = readFileSync(resolve(__dirname, "../src/app/globals.css"), "utf8");
+    const start = css.indexOf(THEME_CSS_START);
+    const end = css.indexOf(THEME_CSS_END);
+    expect(start, "globals.css 缺少调色板起始标记").toBeGreaterThan(-1);
+    expect(end, "globals.css 缺少调色板结束标记").toBeGreaterThan(start);
+    const actual = css.slice(start + THEME_CSS_START.length, end).trim();
+    // 不一致时，把 Expected 的内容粘贴到 globals.css 两个标记之间
+    expect(actual).toBe(buildThemeCss());
+  });
+
+  it("切换器圆点色（theme-meta 的 swatch）等于各主题 textAccent", () => {
     for (const name of themeNames) {
-      // 抽查 muted 色：正是历史上被覆盖的那个变量
-      expect(script, `${name} 的 textMuted 未出现在内联脚本中`).toContain(
-        themes[name].colors.textMuted
-      );
+      expect(themes[name].swatch, name).toBe(themes[name].colors.textAccent);
     }
   });
 });

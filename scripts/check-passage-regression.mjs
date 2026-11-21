@@ -44,6 +44,68 @@ ok(qiwu.includes("查看注释"), "逐字注按钮（WordTooltip）");
 ok(qiwu.includes("passage-grid"), "分栏网格容器");
 ok(!qiwu.includes("split-view"), "初始无 split-view 类（hydration 一致）");
 ok(!qiwu.includes("pinyin-on"), "初始无 pinyin-on 类");
+// 1b) 静态块：正文只在 HTML 里出现一次，不进内联 RSC 载荷
+console.log("— 静态块（正文不重复进 RSC 载荷）—");
+const rscOf = (html) =>
+  [...html.matchAll(/<script>self\.__next_f\.push\(\[1,"([\s\S]*?)"\]\)<\/script>/g)]
+    .map((m) => JSON.parse(`"${m[1]}"`))
+    .join("");
+const qiwuBlocks = JSON.parse(readFileSync(join(OUT, "chapters", "02-qiwu-lun", "blocks.json"), "utf8"));
+const qiwuRsc = rscOf(qiwu);
+// 取首段原文中段的一截（开头 12 字会作为目录短标题进 ChapterTOC 的 props）
+const SAMPLE = qiwuBlocks["02-qiwu-lun-1-o"].replace(/<[^>]+>/g, "").slice(20, 36);
+ok(qiwu.replace(/<script[\s\S]*?<\/script>/g, "").includes(SAMPLE), "原文在 HTML 中直出");
+ok(!qiwuRsc.includes(SAMPLE), "原文不在内联 RSC 载荷中");
+ok(!qiwuRsc.includes("查看注释"), "逐字注不再是逐词客户端岛（RSC 中无其 props）");
+ok(qiwu.includes('data-sb="/chapters/02-qiwu-lun/blocks.json#head"'), "篇首静态块标记");
+ok(["head", "nav", "02-qiwu-lun-1-o", "02-qiwu-lun-1-t"].every((k) => typeof qiwuBlocks[k] === "string" && qiwuBlocks[k].length > 0), "blocks.json 含篇首/导航/首段原文与译文");
+ok(!("ld" in qiwuBlocks), "blocks.json 不含 JSON-LD（仅 HTML 直出）");
+ok((qiwu.match(/<script type="application\/ld\+json"/g) || []).length >= 1 && qiwu.includes('"BreadcrumbList"'), "章节页 JSON-LD（含面包屑）仍直出");
+const daoHtml = readFileSync(join(OUT, "concepts", "dao", "index.html"), "utf8");
+const daoBlocks = JSON.parse(readFileSync(join(OUT, "concepts", "dao", "blocks.json"), "utf8"));
+ok(typeof daoBlocks.body === "string" && daoBlocks.body.includes("<h1"), "概念页 blocks.json 含正文");
+ok(daoHtml.includes("<h1") && !rscOf(daoHtml).includes("相关段落"), "概念页正文直出且不进 RSC 载荷");
+ok(daoHtml.includes('"DefinedTerm"') && daoHtml.includes('"BreadcrumbList"'), "概念页 JSON-LD 仍直出");
+// 列表页同样走静态块
+for (const [route, marker, sample] of [
+  ["chapters", "body", "入门首选"],
+  ["concepts", "grid", "个核心哲学概念"],
+]) {
+  const html = readFileSync(join(OUT, route, "index.html"), "utf8");
+  const blocks = JSON.parse(readFileSync(join(OUT, route, "blocks.json"), "utf8"));
+  ok(html.includes(`data-sb="/${route}/blocks.json#${marker}"`) && html.includes(blocks[marker]), `/${route} 列表正文直出且与 blocks.json 一致`);
+  ok(!rscOf(html).includes(sample), `/${route} 列表正文不进 RSC 载荷`);
+  ok(html.includes('<script type="application/ld+json"') && !("ld" in blocks), `/${route} JSON-LD 仍直出`);
+}
+// 直出的 HTML 与 blocks.json 必须是同一份内容（客户端路由进入与直接加载看到的 DOM 一致）
+ok(Object.values(qiwuBlocks).every((html) => qiwu.includes(html)), "章节页每个静态块的直出内容与 blocks.json 逐字节一致");
+// 属性名不得被改写成错误名字（逐块与 React 渲染比对在 tests/static-html.test.ts；这里对全部产物兜底）
+const BAD_ATTR = /^(classname|htmlfor|strokewidth|strokelinecap|strokelinejoin|fillrule|cliprule|clippath|xlinkhref|viewbox|charset|dangerouslysetinnerhtml|suppresshydrationwarning|key|ref|children|on[a-z]+)$/;
+const badAttrs = new Set();
+const walk = (dir) => {
+  for (const name of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, name.name);
+    if (name.isDirectory()) walk(full);
+    else if (name.name === "blocks.json") {
+      for (const html of Object.values(JSON.parse(readFileSync(full, "utf8")))) {
+        for (const tag of html.matchAll(/<[a-zA-Z][^>]*>/g)) {
+          for (const m of tag[0].matchAll(/\s([a-zA-Z:-]+)=/g)) if (BAD_ATTR.test(m[1])) badAttrs.add(m[1]);
+        }
+        if (/\[object Object\]|>undefined<|="undefined"/.test(html)) badAttrs.add("[object/undefined 泄漏]");
+      }
+    }
+  }
+};
+walk(join(OUT, "chapters"));
+walk(join(OUT, "concepts"));
+ok(badAttrs.size === 0, `全部 blocks.json 无错误属性名${badAttrs.size ? "：" + [...badAttrs].join(", ") : ""}`);
+// 工具条图标 sprite：每个图标的 path 全页只定义一次
+ok((qiwu.match(/<symbol id="tb-star"/g) || []).length === 1, "工具条 sprite 只出现一次");
+ok((qiwu.match(/<use href="#tb-star"/g) || []).length === (qiwu.match(/<section [^>]*data-passage-root/g) || []).length, "每段工具条引用 sprite 而非内联 path");
+ok(!qiwu.includes('placeholder="写下你的感悟'), "批注面板不再随首屏直出（首次打开时加载）");
+const BUDGET_RSC = 90 * 1024;
+ok(qiwuRsc.length < BUDGET_RSC, `章节页内联 RSC ${(qiwuRsc.length / 1024).toFixed(1)}KB < 90KB`);
+
 // 2) 懒加载数据
 console.log("— 懒加载数据 —");
 const dataOut = join(OUT, "data");

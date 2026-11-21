@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { subscribeCurrentPassage } from "@/lib/passage-dom";
+
 interface TocItem {
   id: string;
   label: string;
@@ -27,31 +29,13 @@ export default function ChapterTOC({ items }: ChapterTOCProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
-  // Track which passage is currently in view
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveId(entry.target.id);
-          }
-        }
-      },
-      { rootMargin: "-20% 0px -60% 0px", threshold: 0 }
-    );
-
-    items.forEach((p) => {
-      const el = document.getElementById(`passage-${p.id}`);
-      if (el) observer.observe(el);
-    });
-
-    return () => observer.disconnect();
-  }, [items]);
+  // 当前阅读到的段落（与 RecordReading / ScholarMarginNotes 共用同一个 IntersectionObserver）
+  useEffect(() => subscribeCurrentPassage((el) => setActiveId(el.id)), [items]);
 
   if (items.length <= 1) return null;
 
   return (
-    <div className={`chapter-toc hidden lg:block fixed right-4 top-24 z-30 transition-all ${collapsed ? "w-8" : "w-48"}`}>
+    <nav aria-label="章节目录" className={`chapter-toc hidden lg:block fixed right-4 top-24 z-30 transition-all ${collapsed ? "w-8" : "w-48"}`}>
       <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)]/95 backdrop-blur-sm shadow-lg overflow-hidden">
         {/* Header */}
         <button
@@ -76,6 +60,7 @@ export default function ChapterTOC({ items }: ChapterTOCProps) {
               <a
                 key={p.id}
                 href={`#passage-${p.id}`}
+                aria-current={activeId === `passage-${p.id}` ? "location" : undefined}
                 onClick={(e) => {
                   e.preventDefault();
                   document.getElementById(`passage-${p.id}`)?.scrollIntoView({ behavior: "smooth" });
@@ -93,6 +78,6 @@ export default function ChapterTOC({ items }: ChapterTOCProps) {
           </div>
         )}
       </div>
-    </div>
+    </nav>
   );
 }

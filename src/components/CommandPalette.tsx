@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
+import { JIAZHU_MODE_KEY } from "@/lib/reading-prefs";
+
 import { useTheme } from "./ThemeProvider";
 
 interface ChapterItem {
@@ -232,10 +234,6 @@ export default function CommandPalette({
         perform: () => {
           const next = theme === "yedu" ? "xuanzhi" : "yedu";
           setTheme(next);
-          try {
-            localStorage.setItem("zhuangzi-theme", next);
-            document.documentElement.setAttribute("data-theme", next);
-          } catch {}
           closePalette();
         },
       },
@@ -248,7 +246,8 @@ export default function CommandPalette({
         perform: () => {
           const isJiazhu = document.documentElement.classList.toggle("jiazhu-mode");
           try {
-            localStorage.setItem("jiazhuMode", isJiazhu ? "true" : "false");
+            // 与阅读设置面板同一个键与取值，否则刷新后不保留
+            localStorage.setItem(JIAZHU_MODE_KEY, isJiazhu ? "jiazhu" : "standard");
           } catch {}
           closePalette();
         },
@@ -541,7 +540,7 @@ export default function CommandPalette({
                         : item.group === "哲学概念"
                         ? "bg-[var(--color-accent-gold)]/15 text-[var(--color-accent-gold)]"
                         : item.group === "寓言典故"
-                        ? "bg-[var(--accent-bamboo,#3A6B56)]/15 text-[var(--accent-bamboo,#3A6B56)]"
+                        ? "bg-[var(--color-accent-bamboo)]/15 text-[var(--color-accent-bamboo)]"
                         : item.group === "名句"
                         ? "bg-[var(--color-accent-vermilion)]/10 text-[var(--color-accent-vermilion)]"
                         : "bg-[var(--bg-secondary)] text-[var(--text-muted)]"

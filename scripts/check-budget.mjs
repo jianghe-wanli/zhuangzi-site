@@ -12,7 +12,7 @@
  * 运行：node scripts/check-budget.mjs
  *      node scripts/check-budget.mjs --update   （把当前值写回基线）
  */
-import { existsSync, readdirSync, readFileSync, statSync,writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -26,17 +26,30 @@ if (!existsSync(OUT)) {
   process.exit(1);
 }
 
-/** 预算（KB, gzip）。刻意略高于当前实测值，留出正常波动空间。 */
+/**
+ * 绝对上限（KB, gzip）。只是兜底；真正防回退的是下面的「相对基线」门禁。
+ *
+ * 口径说明：JS 只计现代浏览器**实际会下载**的脚本。Next 在每页都输出一个
+ * `<script noModule>` 的 polyfill（gzip 约 38KB），支持 ES modules 的浏览器
+ * 不会请求它；此前它被算进每个路由的 JS，共享基线因此虚高约 38KB。
+ */
 const BUDGETS = {
   // 每个路由共享的 JS 基线
-  sharedJsGzipKB: 230,
+  sharedJsGzipKB: 190,
   // 单个路由 HTML(gzip)
   routeHtmlGzipKB: 260,
   // 单路由总量（HTML + JS + CSS，gzip）
-  routeTotalGzipKB: 480,
+  routeTotalGzipKB: 440,
   // 全站 out/ 总量
   totalOutputMB: 45,
 };
+
+/**
+ * 相对基线门禁：任一指标比 scripts/budget.json 记录的基线高出超过此比例即失败。
+ * 此前基线文件只写不读，绝对预算又比实测高出 15–50%，等于几十 KB 的回退都能悄悄溜过。
+ * 有意增长时运行 `node scripts/check-budget.mjs --update` 更新基线并在提交里说明。
+ */
+const REGRESSION_TOLERANCE = 0.05;
 
 const gz = (buf) => gzipSync(buf, { level: 9 }).length;
 
@@ -63,10 +76,21 @@ const assetGzip = (rel) => {
 };
 
 const routes = [];
+let legacyJsBytes = 0;
 for (const file of htmlFiles) {
   const html = readFileSync(file, "utf8");
+  // 现代浏览器不会下载 <script noModule>，不计入首屏
+  const legacy = new Set(
+    [...html.matchAll(/<script\b[^>]*\bnomodule\b[^>]*>/gi)]
+      .map((m) => /src="([^"]+)"/.exec(m[0])?.[1])
+      .filter(Boolean)
+  );
   const refs = [...html.matchAll(/(?:src|href)="(\/_next\/static\/[^"]+)"/g)].map((m) => m[1]);
-  const unique = [...new Set(refs)];
+  // 不加载任何构建产物的独立页（SW 离线兜底页 /offline/）不参与路由统计，
+  // 否则「共享 JS 基线 = 各路由 JS 的最小值」会被它拉成 0。
+  if (refs.length === 0) continue;
+  const unique = [...new Set(refs)].filter((r) => !legacy.has(r));
+  for (const r of legacy) legacyJsBytes = Math.max(legacyJsBytes, assetGzip(r));
   let js = 0;
   let css = 0;
   for (const r of unique) {
@@ -107,6 +131,24 @@ if (totalMB > BUDGETS.totalOutputMB) {
   failures.push(`out/ 总体积 ${totalMB.toFixed(1)}MB > ${BUDGETS.totalOutputMB}MB`);
 }
 
+const UPDATE = process.argv.includes("--update");
+const baseline = existsSync(BASELINE_PATH) ? JSON.parse(readFileSync(BASELINE_PATH, "utf8")) : null;
+if (baseline && !UPDATE) {
+  const checks = [
+    ["共享 JS 基线", sharedJsKB, baseline.sharedJsGzipKB, "KB"],
+    ["最重路由首屏合计", routes[0]?.totalKB ?? 0, baseline.worstRouteTotalGzipKB, "KB"],
+    ["out/ 总体积", totalMB, baseline.totalOutputMB, "MB"],
+  ];
+  for (const [label, now, base, unit] of checks) {
+    if (typeof base === "number" && now > base * (1 + REGRESSION_TOLERANCE)) {
+      failures.push(
+        `${label} ${now.toFixed(1)}${unit} 比基线 ${base}${unit} 高出 ` +
+          `${(((now - base) / base) * 100).toFixed(1)}%（容忍 ${REGRESSION_TOLERANCE * 100}%）`
+      );
+    }
+  }
+}
+
 console.log("首屏体积（gzip, KB） —— 最重的 12 个路由");
 console.log("".padEnd(74, "-"));
 console.log(
@@ -123,8 +165,9 @@ for (const r of routes.slice(0, 12)) {
 }
 console.log("".padEnd(74, "-"));
 console.log(`路由数 ${routes.length}   共享 JS 基线 ${sharedJsKB.toFixed(1)}KB   out/ 总体积 ${totalMB.toFixed(1)}MB`);
+console.log(`（另有 noModule polyfill ${(legacyJsBytes / 1024).toFixed(1)}KB，仅旧浏览器下载，不计入上表）`);
 
-if (process.argv.includes("--update")) {
+if (UPDATE) {
   const baseline = {
     updatedAt: new Date().toISOString().slice(0, 10),
     sharedJsGzipKB: Number(sharedJsKB.toFixed(1)),
@@ -139,7 +182,10 @@ if (process.argv.includes("--update")) {
 if (failures.length) {
   console.error("\n❌ 超出体积预算：");
   for (const f of failures) console.error("   " + f);
-  console.error("\n若为有意的体积增长，请在 scripts/check-budget.mjs 中调整 BUDGETS 并说明原因。");
+  console.error(
+    "\n若为有意的体积增长：运行 node scripts/check-budget.mjs --update 更新基线" +
+      "（超出绝对上限时另需调整 BUDGETS），并在提交信息里说明原因。"
+  );
   process.exit(1);
 }
 console.log("\n✅ 全部路由均在体积预算内");

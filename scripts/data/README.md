@@ -25,7 +25,8 @@
 
 ## 一次性导入脚本（archive/）
 
-`archive/` 下的 Python 脚本是整理期的一次性导入/修补工具：
+`archive/` 下的 Python 脚本与 `annotate-chapters.js` 是整理期的一次性导入/修补工具
+（不在 lint / 构建 / 测试范围内）：
 
 - 硬编码了机器本地绝对路径（`C:/Users/Administrator/...`），在其他机器/CI 无法运行；
 - 部分脚本含测试串（如 `up_test.py` 会把 `TEST_COMMENTARY_27` 写进正文）——
@@ -39,5 +40,5 @@
 
 1. 直接编辑人工整理数据（见上）；
 2. 重跑受影响的可复现产物：`node scripts/gen-metadata.mjs`（如改篇目结构）；
-3. 本地 `npm run verify`（typecheck + lint + 65 测试）与 `npm run build`；
+3. 本地 `npm run verify`（typecheck + lint + 数据校验 + 全部测试）与 `npm run build`；
 4. 推分支走 CI：CI 会在 `verify` job 中校验 `metadata.json` 与生成器一致。
