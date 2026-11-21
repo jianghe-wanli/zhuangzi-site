@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { breadcrumbJsonLd } from "@/lib/breadcrumb-jsonld";
 import { buildPageMetadata } from "@/lib/site";
 
 export const metadata: Metadata = buildPageMetadata({
@@ -42,6 +43,10 @@ const INFLUENCES = [
 export default function ZhuangziPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: breadcrumbJsonLd("庄子其人", "/zhuangzi") }}
+      />
       {/* Hero */}
       <div className="text-center mb-12">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-wide text-[var(--text-accent)] mb-3">庄子</h1>

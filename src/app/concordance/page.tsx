@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { chaptersMeta } from "@/data/chapters/metadata";
+import { breadcrumbJsonLd } from "@/lib/breadcrumb-jsonld";
 import { concordanceWords } from "@/lib/concordance-data";
 import { buildPageMetadata } from "@/lib/site";
 
@@ -18,6 +19,10 @@ const chapters = chaptersMeta.map((m) => ({ id: m.id, title: m.title }));
 export default function ConcordancePage() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: breadcrumbJsonLd("词语索引", "/concordance") }}
+      />
       {/* Header */}
       <div className="text-center mb-10">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.04em] text-[var(--text-primary)] mb-3">
