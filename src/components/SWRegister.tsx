@@ -40,7 +40,7 @@ function registerSW() {
     window.location.reload();
   });
 
-  window.addEventListener("load", () => {
+  const onLoad = () => {
     pageLoaded = true;
     // 延迟至首屏彻底空闲后再注册 SW，避免安装线程与首屏渲染争抢网络/主线程
     window.setTimeout(() => {
@@ -48,7 +48,11 @@ function registerSW() {
         // Silently fail — SW is progressive enhancement
       });
     }, 4000);
-  });
+  };
+  // 本函数在水合后的 effect 里执行，load 事件可能已经触发过（脚本全部命中缓存时
+  // 很常见）—— 那样监听器永远等不到，Service Worker 就不会注册
+  if (document.readyState === "complete") onLoad();
+  else window.addEventListener("load", onLoad, { once: true });
 }
 
 export default function SWRegister() {
