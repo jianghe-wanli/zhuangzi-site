@@ -25,14 +25,40 @@ export interface SearchItem {
 }
 
 let _searchIndex: SearchItem[] | null = null;
+let _indexPromise: Promise<SearchItem[]> | null = null;
 
-async function ensureIndex(): Promise<{ searchIndex: SearchItem[] }> {
-  if (_searchIndex) return { searchIndex: _searchIndex };
+/** public/data/search-index.json 的结构（scripts/gen-lazy-data.mjs 构建期生成） */
+interface SlimChapter {
+  id: string;
+  title: string;
+  category: string;
+  passages: { id: string; o: string; t: string; c?: string[] }[];
+}
 
-  // 全文数据(703KB)延迟到首次搜索时再加载，避免阻塞搜索页/问庄子页首屏
+async function loadSlimIndex(): Promise<SearchItem[]> {
+  const res = await fetch("/data/search-index.json");
+  if (!res.ok) throw new Error(`search index ${res.status}`);
+  const data = (await res.json()) as SlimChapter[];
+  return data.flatMap((ch) =>
+    ch.passages.map((p, i) => ({
+      chapterId: ch.id,
+      chapterTitle: ch.title,
+      chapterCategory: ch.category,
+      passageId: p.id,
+      index: i,
+      original: p.o,
+      translation: p.t,
+      commentary: "",
+      concepts: p.c ?? [],
+      searchText: p.o,
+    }))
+  );
+}
+
+/** 兜底：索引文件不可用（如未跑过构建的 dev 环境）时退回打包的全量篇章数据 */
+async function loadFullIndex(): Promise<SearchItem[]> {
   const { chapters } = await import("@/data/chapters");
-
-  _searchIndex = chapters.flatMap((ch) =>
+  return chapters.flatMap((ch) =>
     ch.passages.map((p, i) => ({
       chapterId: ch.id,
       chapterTitle: ch.title,
@@ -48,7 +74,17 @@ async function ensureIndex(): Promise<{ searchIndex: SearchItem[] }> {
       searchText: p.original,
     }))
   );
+}
 
+async function ensureIndex(): Promise<{ searchIndex: SearchItem[] }> {
+  if (_searchIndex) return { searchIndex: _searchIndex };
+  // 首次搜索才加载；优先取精简索引（仅原文+译文，约为全量篇章数据的 1/6）
+  _indexPromise ??= loadSlimIndex().catch(loadFullIndex);
+  try {
+    _searchIndex = await _indexPromise;
+  } finally {
+    _indexPromise = null;
+  }
   return { searchIndex: _searchIndex };
 }
 
