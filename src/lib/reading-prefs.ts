@@ -19,6 +19,20 @@ export function readingCssValue(key: string, val: string): string | undefined {
   return READING_CSS_VALUE_MAP[key]?.[val];
 }
 
+/** 读出已存的排版偏好，只保留白名单内的键与取值；存储不可用 / 损坏时返回空对象 */
+export function readReadingPrefs(): Record<string, string> {
+  const valid: Record<string, string> = {};
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(READING_SETTINGS_KEY) ?? "{}");
+    if (parsed && typeof parsed === "object") {
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === "string" && readingCssValue(k, v)) valid[k] = v;
+      }
+    }
+  } catch {}
+  return valid;
+}
+
 /**
  * 首帧前恢复排版偏好的内联脚本（与 ReadingSettings 挂载时的恢复逻辑等价）。
  * 只接受白名单内的键与取值；内容全部为构建期常量。
