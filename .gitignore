@@ -67,3 +67,4 @@ screenshots/
 # 构建缓存（OG 图输入指纹等）与 ESLint 缓存
 /.cache/
 .eslintcache
+.lighthouseci/
