@@ -1,7 +1,7 @@
 {
   "updatedAt": "2026-11-21",
-  "sharedJsGzipKB": 158.9,
+  "sharedJsGzipKB": 149.3,
   "worstRoute": "/concepts/dao",
-  "worstRouteTotalGzipKB": 278,
-  "totalOutputMB": 41.5
+  "worstRouteTotalGzipKB": 268.8,
+  "totalOutputMB": 41
 }
