@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Script = "simp" | "trad";
 type TradMapModule = typeof import("@/data/trad-map");
@@ -72,6 +72,25 @@ export default function SimplifiedToggle() {
     }
     document.documentElement.lang = target === "trad" ? "zh-Hant" : "zh-Hans";
   }, []);
+
+  // 繁体态下客户端路由换页（或正文晚于骨架到达）后，新内容是简体而按钮仍显示「繁体已开」。
+  // 繁体态期间观察 <main> 的节点增删，新内容出现就补一次转换（已转换的节点不会重复转换：
+  // originals 记着每个文本节点的原文，转换结果与当前一致时不写 DOM）。
+  useEffect(() => {
+    if (script !== "trad") return;
+    const main = document.getElementById("main-content");
+    if (!main) return;
+    let timer: number | undefined;
+    const mo = new MutationObserver(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => void applyScript("trad"), 80);
+    });
+    mo.observe(main, { childList: true, subtree: true });
+    return () => {
+      window.clearTimeout(timer);
+      mo.disconnect();
+    };
+  }, [script, applyScript]);
 
   const toggle = () => {
     const next: Script = script === "simp" ? "trad" : "simp";
