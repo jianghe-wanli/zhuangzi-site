@@ -9,14 +9,15 @@ const buildId = readFileSync(join(cwd, ".next", "BUILD_ID"), "utf8").trim();
 const swPath = join(cwd, "out", "sw.js");
 const sw = readFileSync(swPath, "utf8");
 
-const bumped = sw.replace(
-  /(zhuangzi-(?:static|pages|json))-v\d+/g,
-  `$1-${buildId}`
-);
+// 匹配所有带 -v<数字> 后缀的缓存名；zhuangzi-immutable（内容哈希资源）故意不带后缀，
+// 跨部署保留。
+const VERSIONED = /(zhuangzi-[a-z]+)-v\d+/g;
+const bumped = sw.replace(VERSIONED, `$1-${buildId}`);
 
 if (bumped === sw) {
-  console.warn("[sw] 未找到可替换的缓存版本号，跳过");
-} else {
-  writeFileSync(swPath, bumped);
-  console.log(`[sw] 缓存版本号已更新为 ${buildId}`);
+  // 没替换到说明 sw.js 的命名约定变了：旧缓存将永不失效，必须让构建失败
+  console.error("[sw] 未找到可替换的缓存版本号（约定：zhuangzi-<名称>-v1）");
+  process.exit(1);
 }
+writeFileSync(swPath, bumped);
+console.log(`[sw] 缓存版本号已更新为 ${buildId}`);

@@ -58,8 +58,8 @@ for (const file of pages) {
   const canonical = /<link rel="canonical" href="([^"]*)"/.exec(html)?.[1] ?? "";
   const isNoIndex = /name="robots"[^>]*content="[^"]*noindex/.test(html);
 
-  // 错误页不需要 canonical，但必须是 noindex
-  const isErrorPage = route === "/404" || route === "/_not-found";
+  // 错误页 / SW 离线兜底页不需要 canonical，但必须是 noindex
+  const isErrorPage = route === "/404" || route === "/_not-found" || route === "/offline";
   if (isErrorPage) {
     if (!isNoIndex) note(`${route}: 错误页应声明 noindex`);
   } else if (!canonical) {
@@ -152,7 +152,7 @@ const swPath = join(OUT, "sw.js");
 if (!existsSync(swPath)) note("缺少 sw.js");
 else {
   const sw = readFileSync(swPath, "utf8");
-  if (/zhuangzi-(static|pages|json)-v1\b/.test(sw)) {
+  if (/zhuangzi-[a-z]+-v\d+\b/.test(sw)) {
     note("sw.js 的缓存版本号仍是 v1 —— bump-sw-version.mjs 未生效，部署后旧缓存不会失效");
   }
 }
