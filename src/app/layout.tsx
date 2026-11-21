@@ -8,6 +8,7 @@ import Navigation from "@/components/Navigation";
 import ReadingProgress from "@/components/ReadingProgress";
 import ShortcutsHelp from "@/components/ShortcutsHelp";
 import SWRegister from "@/components/SWRegister";
+import { buildInlineReadingPrefsScript } from "@/lib/reading-prefs";
 import { canonicalUrl, OG_IMAGE, SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
 import { buildInlineThemeScript, DEFAULT_THEME, themes } from "@/lib/theme";
 
@@ -155,8 +156,12 @@ export default function RootLayout({
         {/* Cloudflare Web Analytics — replace token to enable */}
         {/* <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "YOUR_TOKEN"}'></script> */}
 
-        {/* 防闪烁主题脚本：内容由 @/lib/theme 的调色板生成，不再手抄字面量 */}
-        <script dangerouslySetInnerHTML={{ __html: buildInlineThemeScript() }} />
+        {/* 首帧前同步执行：① 主题（写 <html data-theme>，调色板在 globals.css）
+            ② 阅读排版偏好（字号/行距/版心/夹注），避免水合后整体重排。
+            两段都只含构建期常量；每页要付两次（<script> + RSC），务必保持精简 */}
+        <script
+          dangerouslySetInnerHTML={{ __html: buildInlineThemeScript() + ";" + buildInlineReadingPrefsScript() }}
+        />
 
         <script
           type="application/ld+json"

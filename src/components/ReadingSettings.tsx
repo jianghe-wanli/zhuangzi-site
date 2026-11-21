@@ -2,208 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { JIAZHU_MODE_KEY, READING_SETTINGS_KEY, readingCssValue } from "@/lib/reading-prefs";
+import type { SoundMode, StudyAudioEngine } from "@/lib/study-audio";
+
 const textSettings = [
   { key: "fontSize", label: "字号", values: ["sm", "base", "lg", "xl"], labels: ["小", "中", "大", "特大"] },
   { key: "lineHeight", label: "行距", values: ["1.6", "1.9", "2.2", "2.5"], labels: ["窄", "标准", "宽", "特宽"] },
   { key: "readingWidth", label: "版心", values: ["narrow", "normal", "wide"], labels: ["窄", "标准", "宽"] },
 ] as const;
-
-/** 设置值 → CSS 长度（localStorage 存符号值，:root 变量存可用的 CSS 值） */
-const CSS_VALUE_MAP: Record<string, Record<string, string>> = {
-  fontSize: { sm: "0.875rem", base: "1rem", lg: "1.125rem", xl: "1.25rem" },
-  lineHeight: { "1.6": "1.6", "1.9": "1.9", "2.2": "2.2", "2.5": "2.5" },
-  readingWidth: { narrow: "36rem", normal: "48rem", wide: "56rem" },
-};
-
-function cssValue(key: string, val: string): string {
-  return CSS_VALUE_MAP[key]?.[val] ?? val;
-}
-
-type SoundMode = "none" | "guqin" | "rain";
-
-/**
- * 纯 Web Audio API 程序化书斋声音合成引擎（零外部音频文件加载）
- */
-class StudyAudioEngine {
-  private ctx: AudioContext | null = null;
-  private noiseNode: AudioBufferSourceNode | null = null;
-  private noiseGain: GainNode | null = null;
-  private lfo: OscillatorNode | null = null;
-  private filter: BiquadFilterNode | null = null;
-  private guqinTimer: number | null = null;
-  private currentMode: SoundMode = "none";
-
-  private ensureContext(): AudioContext {
-    if (!this.ctx || this.ctx.state === "closed") {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioCtx();
-    }
-    if (this.ctx.state === "suspended") {
-      this.ctx.resume();
-    }
-    return this.ctx;
-  }
-
-  private createPinkNoiseBuffer(ctx: AudioContext, seconds = 4): AudioBuffer {
-    const bufferSize = ctx.sampleRate * seconds;
-    const buffer = ctx.createBuffer(2, bufferSize, ctx.sampleRate);
-    for (let channel = 0; channel < 2; channel++) {
-      const data = buffer.getChannelData(channel);
-      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-      for (let i = 0; i < bufferSize; i++) {
-        const white = Math.random() * 2 - 1;
-        b0 = 0.99886 * b0 + white * 0.0555179;
-        b1 = 0.99332 * b1 + white * 0.0750759;
-        b2 = 0.96900 * b2 + white * 0.1538520;
-        b3 = 0.86650 * b3 + white * 0.3104856;
-        b4 = 0.55000 * b4 + white * 0.5329522;
-        b5 = -0.76160 * b5 - white * 0.0168980;
-        data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
-        b6 = white * 0.115926;
-      }
-    }
-    return buffer;
-  }
-
-  public stop() {
-    this.currentMode = "none";
-    if (this.guqinTimer) {
-      window.clearTimeout(this.guqinTimer);
-      this.guqinTimer = null;
-    }
-    if (this.lfo) {
-      try { this.lfo.stop(); this.lfo.disconnect(); } catch {}
-      this.lfo = null;
-    }
-    if (this.noiseNode) {
-      try { this.noiseNode.stop(); this.noiseNode.disconnect(); } catch {}
-      this.noiseNode = null;
-    }
-    if (this.noiseGain) {
-      try { this.noiseGain.disconnect(); } catch {}
-      this.noiseGain = null;
-    }
-    if (this.filter) {
-      try { this.filter.disconnect(); } catch {}
-      this.filter = null;
-    }
-    if (this.ctx && this.ctx.state !== "closed") {
-      try { this.ctx.suspend(); } catch {}
-    }
-  }
-
-  public playRain() {
-    this.stop();
-    this.currentMode = "rain";
-    const ctx = this.ensureContext();
-
-    // 竹林听雨：双声道粉红噪声缓冲区 + BiquadFilterNode (lowpass 800Hz + 缓慢 LFO 调制)
-    // 音量控制在 gain = 0.04
-    const pinkBuffer = this.createPinkNoiseBuffer(ctx, 4);
-    const noise = ctx.createBufferSource();
-    noise.buffer = pinkBuffer;
-    noise.loop = true;
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(800, ctx.currentTime);
-    filter.Q.setValueAtTime(1.2, ctx.currentTime);
-
-    // 缓慢 LFO 调制 0.15Hz（沙沙微风雨韵）
-    const lfo = ctx.createOscillator();
-    lfo.frequency.setValueAtTime(0.15, ctx.currentTime);
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.setValueAtTime(150, ctx.currentTime);
-    lfo.connect(lfoGain);
-    lfoGain.connect(filter.frequency);
-    lfo.start();
-
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.04, ctx.currentTime);
-
-    noise.connect(filter);
-    filter.connect(masterGain);
-    masterGain.connect(ctx.destination);
-    noise.start();
-
-    this.noiseNode = noise;
-    this.filter = filter;
-    this.lfo = lfo;
-    this.noiseGain = masterGain;
-  }
-
-  public playGuqin() {
-    this.stop();
-    this.currentMode = "guqin";
-    const ctx = this.ensureContext();
-
-    // 极轻柔底噪（超低音量粉红噪声）
-    const pinkBuffer = this.createPinkNoiseBuffer(ctx, 4);
-    const noise = ctx.createBufferSource();
-    noise.buffer = pinkBuffer;
-    noise.loop = true;
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(320, ctx.currentTime);
-
-    const floorGain = ctx.createGain();
-    floorGain.gain.setValueAtTime(0.008, ctx.currentTime);
-
-    noise.connect(filter);
-    filter.connect(floorGain);
-    floorGain.connect(ctx.destination);
-    noise.start();
-
-    this.noiseNode = noise;
-    this.noiseGain = floorGain;
-
-    // 中国五声音阶：宫商角徵羽
-    const PENTATONIC = [130.81, 146.83, 164.81, 196.00, 220.00, 261.63];
-
-    const pluck = (freq: number) => {
-      if (this.currentMode !== "guqin" || !this.ctx || this.ctx.state === "closed") return;
-      const now = this.ctx.currentTime;
-
-      // 古琴正弦 + 泛音包络：快速起音 0.08s，悠长古琴余韵指数衰减 4.2s
-      const harmonics = [
-        { mult: 1, gain: 0.08, decay: 4.2 },
-        { mult: 2, gain: 0.035, decay: 3.2 },
-        { mult: 3, gain: 0.015, decay: 2.4 },
-      ];
-
-      harmonics.forEach(({ mult, gain, decay }) => {
-        if (!this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const g = this.ctx.createGain();
-
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(freq * mult, now);
-
-        g.gain.setValueAtTime(0.0001, now);
-        g.gain.linearRampToValueAtTime(gain, now + 0.08);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + decay);
-
-        osc.connect(g);
-        g.connect(this.ctx.destination);
-
-        osc.start(now);
-        osc.stop(now + decay + 0.1);
-      });
-    };
-
-    const scheduleNext = () => {
-      if (this.currentMode !== "guqin") return;
-      const freq = PENTATONIC[Math.floor(Math.random() * PENTATONIC.length)] ?? 196.00;
-      pluck(freq);
-
-      const nextDelay = 4500 + Math.random() * 2500;
-      this.guqinTimer = window.setTimeout(scheduleNext, nextDelay);
-    };
-
-    scheduleNext();
-  }
-}
 
 export default function ReadingSettings() {
   const [open, setOpen] = useState(false);
@@ -211,14 +17,10 @@ export default function ReadingSettings() {
   const [jiazhuMode, setJiazhuMode] = useState<"standard" | "jiazhu">("standard");
   const [soundMode, setSoundMode] = useState<SoundMode>("none");
   const audioEngineRef = useRef<StudyAudioEngine | null>(null);
+  const soundModeRef = useRef<SoundMode>("none");
 
-  // 初始化音效引擎
-  useEffect(() => {
-    audioEngineRef.current = new StudyAudioEngine();
-    return () => {
-      audioEngineRef.current?.stop();
-    };
-  }, []);
+  // 卸载时停止音效
+  useEffect(() => () => audioEngineRef.current?.stop(), []);
 
   // Escape 关闭（下拉面板的标准键盘行为）
   useEffect(() => {
@@ -230,63 +32,92 @@ export default function ReadingSettings() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  // 读取与应用 localStorage
+  // 读取 localStorage 同步面板状态。样式本身已由 <head> 内联脚本在首帧前写好
+  // （见 @/lib/reading-prefs），这里再应用一次只为兜住脚本被拦截的情况。
   useEffect(() => {
-    const saved = localStorage.getItem("readingSettings");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as Record<string, string>;
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setValues(parsed);
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem(READING_SETTINGS_KEY) ?? "{}");
+      if (parsed && typeof parsed === "object") {
+        const valid: Record<string, string> = {};
         for (const [k, v] of Object.entries(parsed)) {
-          document.documentElement.style.setProperty(`--reading-${k}`, cssValue(k, v));
+          const css = typeof v === "string" ? readingCssValue(k, v) : undefined;
+          if (!css) continue; // 丢弃未知键 / 非法取值，不把任意字符串写进样式
+          valid[k] = v as string;
+          document.documentElement.style.setProperty(`--reading-${k}`, css);
         }
-      } catch {}
-    }
-
-    // 双行夹注持久化状态
-    const savedJiazhu = localStorage.getItem("zhuangzi-jiazhu-mode");
-    if (savedJiazhu === "jiazhu") {
-      document.documentElement.classList.add("jiazhu-mode");
-      setJiazhuMode("jiazhu");
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setValues(valid);
+      }
+      if (localStorage.getItem(JIAZHU_MODE_KEY) === "jiazhu") {
+        document.documentElement.classList.add("jiazhu-mode");
+        setJiazhuMode("jiazhu");
+      }
+    } catch {
+      // 存储不可用 / 内容损坏 → 保持默认排版
     }
   }, []);
 
+  /** 写存储失败（隐私模式 / 配额）不影响本次会话内生效 */
+  const persist = (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {}
+  };
+
   const applyTextSetting = (key: string, val: string) => {
+    const css = readingCssValue(key, val);
+    if (!css) return;
     const next = { ...values, [key]: val };
     setValues(next);
-    localStorage.setItem("readingSettings", JSON.stringify(next));
-    document.documentElement.style.setProperty(`--reading-${key}`, cssValue(key, val));
+    document.documentElement.style.setProperty(`--reading-${key}`, css);
+    persist(READING_SETTINGS_KEY, JSON.stringify(next));
   };
 
   const handleJiazhuChange = (mode: "standard" | "jiazhu") => {
     setJiazhuMode(mode);
     document.documentElement.classList.toggle("jiazhu-mode", mode === "jiazhu");
-    localStorage.setItem("zhuangzi-jiazhu-mode", mode);
+    persist(JIAZHU_MODE_KEY, mode);
   };
 
   const handleSoundChange = (mode: SoundMode) => {
     setSoundMode(mode);
-    if (!audioEngineRef.current) return;
-    if (mode === "rain") {
-      audioEngineRef.current.playRain();
-    } else if (mode === "guqin") {
-      audioEngineRef.current.playGuqin();
-    } else {
-      audioEngineRef.current.stop();
+    soundModeRef.current = mode;
+    if (mode === "none") {
+      audioEngineRef.current?.stop();
+      return;
     }
+    const play = (engine: StudyAudioEngine) => {
+      // 引擎 chunk 加载期间读者可能已改选 —— 以最新选择为准
+      if (soundModeRef.current === "rain") engine.playRain();
+      else if (soundModeRef.current === "guqin") engine.playGuqin();
+    };
+    if (audioEngineRef.current) {
+      play(audioEngineRef.current);
+      return;
+    }
+    // 首次选择音效时才加载合成引擎（不进共享 JS）
+    void import("@/lib/study-audio")
+      .then(({ StudyAudioEngine: Engine }) => {
+        audioEngineRef.current ??= new Engine();
+        play(audioEngineRef.current);
+      })
+      .catch(() => {
+        soundModeRef.current = "none";
+        setSoundMode("none");
+      });
   };
 
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
         className="min-w-[32px] min-h-[32px] flex items-center justify-center p-1.5 rounded hover:bg-[var(--hover-bg)] text-[var(--text-secondary)] hover:text-[var(--text-accent)] transition-colors"
         title="阅读设置"
         aria-label="阅读设置"
         aria-expanded={open}
       >
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <svg className="w-3.5 h-3.5" fill="none" aria-hidden="true" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
         </svg>
       </button>
@@ -310,6 +141,7 @@ export default function ReadingSettings() {
                       key={v}
                       type="button"
                       onClick={() => applyTextSetting(s.key, v)}
+                      aria-pressed={values[s.key] === v || (!values[s.key] && i === 1)}
                       className={`flex-1 text-xs py-1 rounded transition-colors ${
                         values[s.key] === v || (!values[s.key] && i === 1)
                           ? "bg-[var(--text-accent)]/15 text-[var(--text-accent)] font-medium shadow-xs"
@@ -330,6 +162,7 @@ export default function ReadingSettings() {
                 <button
                   type="button"
                   onClick={() => handleJiazhuChange("standard")}
+                  aria-pressed={jiazhuMode === "standard"}
                   className={`flex-1 text-xs py-1 rounded transition-colors ${
                     jiazhuMode === "standard"
                       ? "bg-[var(--text-accent)]/15 text-[var(--text-accent)] font-medium shadow-xs"
@@ -341,6 +174,7 @@ export default function ReadingSettings() {
                 <button
                   type="button"
                   onClick={() => handleJiazhuChange("jiazhu")}
+                  aria-pressed={jiazhuMode === "jiazhu"}
                   className={`flex-1 text-xs py-1 rounded transition-colors ${
                     jiazhuMode === "jiazhu"
                       ? "bg-[var(--text-accent)]/15 text-[var(--text-accent)] font-medium shadow-xs"
@@ -362,6 +196,7 @@ export default function ReadingSettings() {
                 <button
                   type="button"
                   onClick={() => handleSoundChange("none")}
+                  aria-pressed={soundMode === "none"}
                   className={`flex-1 text-xs py-1 rounded transition-colors ${
                     soundMode === "none"
                       ? "bg-[var(--text-accent)]/15 text-[var(--text-accent)] font-medium shadow-xs"
@@ -373,6 +208,7 @@ export default function ReadingSettings() {
                 <button
                   type="button"
                   onClick={() => handleSoundChange("guqin")}
+                  aria-pressed={soundMode === "guqin"}
                   className={`flex-1 text-xs py-1 rounded transition-colors ${
                     soundMode === "guqin"
                       ? "bg-[var(--text-accent)]/15 text-[var(--text-accent)] font-medium shadow-xs"
@@ -384,6 +220,7 @@ export default function ReadingSettings() {
                 <button
                   type="button"
                   onClick={() => handleSoundChange("rain")}
+                  aria-pressed={soundMode === "rain"}
                   className={`flex-1 text-xs py-1 rounded transition-colors ${
                     soundMode === "rain"
                       ? "bg-[var(--text-accent)]/15 text-[var(--text-accent)] font-medium shadow-xs"
