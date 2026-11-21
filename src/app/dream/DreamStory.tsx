@@ -115,9 +115,12 @@ export default function DreamStory() {
       <div className={`max-w-md w-full transition-opacity duration-500 ${animating ? "opacity-0" : "opacity-100"}`}>
         {/* Scene number */}
         <div className="text-center mb-6">
-          <h1 className="text-[10px] font-normal text-[var(--text-secondary)] tracking-widest mb-1">
+          {/* 全局 h1 规则（古籍字体、窄屏字号）会盖过这里的小字样式，
+              所以页面标题用 sr-only 的 h1，可见的小标仍是普通 div */}
+          <h1 className="sr-only">庄周梦蝶 · 交互叙事</h1>
+          <div aria-hidden="true" className="text-[10px] text-[var(--text-secondary)] tracking-widest mb-1">
             庄周梦蝶 · 交互叙事
-          </h1>
+          </div>
           <div className="mb-2">
             <span className="seal-char-lg" aria-hidden="true">夢</span>
           </div>

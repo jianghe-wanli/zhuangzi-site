@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { breadcrumbJsonLd } from "@/lib/breadcrumb-jsonld";
 import { buildPageMetadata } from "@/lib/site";
 
 import DreamStory from "./DreamStory";
@@ -12,5 +13,13 @@ export const metadata: Metadata = buildPageMetadata({
 });
 
 export default function DreamPage() {
-  return <DreamStory />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: breadcrumbJsonLd("庄周梦蝶", "/dream") }}
+      />
+      <DreamStory />
+    </>
+  );
 }

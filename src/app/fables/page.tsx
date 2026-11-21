@@ -106,7 +106,7 @@ export default function FablesPage() {
             data-keys={f.keywords.join(" ")}
             className="card-interactive group p-5 flex flex-col gap-3"
           >
-            <h2 className="text-base font-semibold text-[var(--text-accent)] tracking-wide group-hover:text-[var(--color-accent-deep)] transition-colors">
+            <h2 className="font-serif! text-base font-semibold text-[var(--text-accent)] tracking-wide group-hover:text-[var(--color-accent-deep)] transition-colors">
               {f.name}
             </h2>
             <p className="text-xs text-[var(--text-primary)] leading-relaxed flex-1">
