@@ -32,24 +32,56 @@ export function registerStaticBlocks(src: string, blocks: Record<string, string>
 
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
 
-/** JSX 属性名 → HTML 属性名（只列本站静态块用到的；其余小写透传） */
+/**
+ * JSX 属性名 → HTML 属性名（白名单）。
+ * 输出名与 react-dom/server 逐字节一致（HTML 属性名大小写不敏感，故 colSpan 等保留驼峰；
+ * SVG 属性大小写敏感，按 React 的写法连字符化）。
+ * 不在表内的驼峰属性一律构建失败 —— 绝不静默小写化成错误名字
+ * （tabIndex→tabindex 恰好正确，但 xlinkHref→xlinkhref、strokeWidth→strokewidth 是错的）。
+ */
 const ATTR: Record<string, string> = {
   className: "class",
   htmlFor: "for",
+  tabIndex: "tabindex",
+  colSpan: "colSpan",
+  rowSpan: "rowSpan",
+  dateTime: "dateTime",
+  srcSet: "srcSet",
+  crossOrigin: "crossorigin",
+  referrerPolicy: "referrerPolicy",
+  autoComplete: "autoComplete",
+  maxLength: "maxLength",
+  readOnly: "readOnly",
+  noValidate: "noValidate",
+  hrefLang: "hrefLang",
+  // SVG：连字符化
   strokeWidth: "stroke-width",
   strokeLinecap: "stroke-linecap",
   strokeLinejoin: "stroke-linejoin",
+  strokeDasharray: "stroke-dasharray",
+  strokeDashoffset: "stroke-dashoffset",
+  strokeOpacity: "stroke-opacity",
+  fillOpacity: "fill-opacity",
   fillRule: "fill-rule",
   clipRule: "clip-rule",
+  clipPath: "clip-path",
+  xlinkHref: "xlink:href",
+  // SVG：本身就是驼峰，原样保留
   viewBox: "viewBox",
+  preserveAspectRatio: "preserveAspectRatio",
 };
 
-export function escapeText(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+/** 布尔属性：true 输出 `attr=""`，false 省略（与 React 一致） */
+const BOOLEAN = new Set(["hidden", "open", "disabled", "checked", "selected", "readOnly", "required", "multiple", "noValidate", "reversed", "defer", "async", "inert"]);
 
-function escapeAttr(s: string): string {
-  return escapeText(s).replace(/"/g, "&quot;");
+/** 只影响 React 自身行为、不产生 HTML 属性的 props */
+const SKIP = new Set(["children", "key", "ref", "suppressHydrationWarning", "suppressContentEditableWarning"]);
+
+/** 转义规则与 react-dom/server 完全一致（tests/static-html.test.ts 逐页比对两者输出） */
+const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#x27;" };
+
+export function escapeText(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ESCAPES[c] ?? c);
 }
 
 interface ElementLike {
@@ -90,17 +122,29 @@ export function renderStatic(node: ReactNode): string {
   let attrs = "";
   let inner: string | null = null;
   for (const [name, value] of Object.entries(props)) {
-    if (name === "children" || name === "key" || name === "ref") continue;
-    if (value === null || value === undefined || value === false) continue;
+    if (SKIP.has(name) || value === null || value === undefined) continue;
     if (name === "dangerouslySetInnerHTML") {
       inner = (value as { __html: string }).__html;
       continue;
     }
-    if (typeof value === "function" || typeof value === "object") {
+    if (typeof value === "function" || typeof value === "object" || typeof value === "symbol") {
       throw new Error(`[static-html] <${type}> 的属性 ${name} 无法静态输出`);
     }
-    const attr = ATTR[name] ?? (name.includes("-") ? name : name.toLowerCase());
-    attrs += value === true ? ` ${attr}=""` : ` ${attr}="${escapeAttr(String(value))}"`;
+    // aria-* / data-*：布尔值按字符串输出（aria-expanded={false} → "false"）
+    if (name.startsWith("aria-") || name.startsWith("data-")) {
+      attrs += ` ${name}="${escapeText(String(value))}"`;
+      continue;
+    }
+    const attr = ATTR[name] ?? name;
+    if (!(name in ATTR) && /[A-Z]/.test(name)) {
+      throw new Error(`[static-html] <${type}> 的属性 ${name} 不在白名单内（见 ATTR）`);
+    }
+    if (typeof value === "boolean") {
+      if (!BOOLEAN.has(name)) throw new Error(`[static-html] <${type}> 的属性 ${name} 不是已知布尔属性`);
+      if (value) attrs += ` ${attr}=""`;
+      continue;
+    }
+    attrs += ` ${attr}="${escapeText(String(value))}"`;
   }
   if (VOID.has(type)) return `<${type}${attrs}/>`;
   return `<${type}${attrs}>${inner ?? renderStatic(props.children as ReactNode)}</${type}>`;
