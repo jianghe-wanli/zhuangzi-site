@@ -20,7 +20,7 @@ export default function NotFound() {
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-24 sm:py-36 text-center">
       {/* 404 in calligraphic style */}
-      <div className="text-8xl sm:text-9xl font-bold text-[var(--text-accent)]/8 font-serif leading-none mb-8 select-none">
+      <div aria-hidden="true" className="text-8xl sm:text-9xl font-bold text-[var(--text-accent)]/8 font-serif leading-none mb-8 select-none">
         404
       </div>
 
@@ -43,9 +43,9 @@ export default function NotFound() {
       <div className="flex items-center justify-center gap-3 mb-10">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--text-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-deep)] transition-colors shadow-sm"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--text-accent)] text-[var(--btn-accent-text,#ffffff)] text-sm font-medium hover:bg-[var(--color-accent-deep)] transition-colors shadow-sm"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <svg aria-hidden="true" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
           </svg>
           回到首页

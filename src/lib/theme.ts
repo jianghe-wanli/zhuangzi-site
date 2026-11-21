@@ -11,12 +11,24 @@
  * #A89880，且它们以 **行内样式** 落到 documentElement 上，优先级高于
  * 样式表，于是修复被完全抵消。
  *
- * 现在：调色板只在本文件定义；CSS 变量名映射、内联脚本、React Provider
- * 全部由此派生。tests/unit/theme-contrast.test.ts 会对每个主题校验对比度，
+ * 现在：调色板只在本文件定义；globals.css 的调色板区块是 buildThemeCss()
+ * 的逐字输出（由测试锁定一致），内联脚本与 React Provider 只切换
+ * <html data-theme>，不再写行内样式。tests/unit/theme-contrast.test.ts 会对每个主题校验对比度，
  * 保证 AA 修复不会再被悄悄改坏。
  */
 
-export type ThemeName = "xuanzhi" | "zhujian" | "moyun" | "qinghua" | "yedu";
+import {
+  DEFAULT_THEME,
+  THEME_META,
+  THEME_STORAGE_KEY,
+  type ThemeMeta,
+  type ThemeName,
+  themeNames,
+} from "./theme-meta";
+
+// 客户端组件请直接 import "@/lib/theme-meta"，不要经由本文件（会把调色板带进 bundle）
+export { applyThemeToDocument, DEFAULT_THEME, isThemeName, THEME_STORAGE_KEY, themeNames } from "./theme-meta";
+export type { ThemeName };
 
 /** 一个主题需要覆盖的全部可换肤颜色 */
 export interface ThemeColors {
@@ -49,24 +61,13 @@ export interface ThemeColors {
   shadowRgb: string;
 }
 
-export interface ThemeDefinition {
-  /** 中文显示名 */
-  name: string;
-  /** 切换器图标 */
-  icon: string;
-  /** 是否深色配色 —— 用于 color-scheme 与 <meta name="theme-color"> */
-  dark: boolean;
-  /** 浏览器 UI 主题色 */
-  themeColor: string;
+export interface ThemeDefinition extends ThemeMeta {
   colors: ThemeColors;
 }
 
 export const themes: Record<ThemeName, ThemeDefinition> = {
   xuanzhi: {
-    name: "宣纸",
-    icon: "宣",
-    dark: false,
-    themeColor: "#8E5431",
+    ...THEME_META.xuanzhi,
     colors: {
       bgPrimary: "#FAF8F4",
       bgSecondary: "#F3ECE1",
@@ -93,10 +94,7 @@ export const themes: Record<ThemeName, ThemeDefinition> = {
     },
   },
   zhujian: {
-    name: "竹简",
-    icon: "竹",
-    dark: false,
-    themeColor: "#5A6B3A",
+    ...THEME_META.zhujian,
     colors: {
       bgPrimary: "#F3F0E4",
       bgSecondary: "#E8E3D2",
@@ -124,10 +122,7 @@ export const themes: Record<ThemeName, ThemeDefinition> = {
     },
   },
   moyun: {
-    name: "墨韵",
-    icon: "墨",
-    dark: false,
-    themeColor: "#333333",
+    ...THEME_META.moyun,
     colors: {
       bgPrimary: "#F5F5F5",
       bgSecondary: "#EEEEEE",
@@ -155,10 +150,7 @@ export const themes: Record<ThemeName, ThemeDefinition> = {
     },
   },
   qinghua: {
-    name: "青花",
-    icon: "青",
-    dark: false,
-    themeColor: "#2B5F8A",
+    ...THEME_META.qinghua,
     colors: {
       bgPrimary: "#F7F9FB",
       bgSecondary: "#EDF2F7",
@@ -192,10 +184,7 @@ export const themes: Record<ThemeName, ThemeDefinition> = {
    * 长文夜读没有可用方案。此主题把那份配色接回真实可切换的状态。
    */
   yedu: {
-    name: "夜读",
-    icon: "夜",
-    dark: true,
-    themeColor: "#14120F",
+    ...THEME_META.yedu,
     colors: {
       bgPrimary: "#161412",
       bgSecondary: "#1F1B16",
@@ -223,9 +212,6 @@ export const themes: Record<ThemeName, ThemeDefinition> = {
   },
 };
 
-export const DEFAULT_THEME: ThemeName = "xuanzhi";
-export const THEME_STORAGE_KEY = "siteTheme";
-
 /** ThemeColors 字段 → CSS 自定义属性名。内联脚本与 Provider 共用。 */
 export const CSS_VAR_BY_KEY: Record<keyof ThemeColors, string> = {
   bgPrimary: "--bg-primary",
@@ -251,12 +237,6 @@ export const CSS_VAR_BY_KEY: Record<keyof ThemeColors, string> = {
   shadowRgb: "--shadow-rgb",
 };
 
-export const themeNames = Object.keys(themes) as ThemeName[];
-
-export function isThemeName(value: unknown): value is ThemeName {
-  return typeof value === "string" && Object.prototype.hasOwnProperty.call(themes, value);
-}
-
 /** 把一个主题展开成 [cssVarName, value][]，供 Provider 与内联脚本使用 */
 export function themeCssVarEntries(name: ThemeName): [string, string][] {
   const def = themes[name];
@@ -266,28 +246,54 @@ export function themeCssVarEntries(name: ThemeName): [string, string][] {
   ]);
 }
 
+/** globals.css 中调色板区块的起止标记（区块内容必须等于 buildThemeCss()） */
+export const THEME_CSS_START = "/* @theme-palette:start */";
+export const THEME_CSS_END = "/* @theme-palette:end */";
+
+/**
+ * 把全部主题展开成 CSS 规则：默认主题落在 `:root`，其余落在
+ * `:root[data-theme="<name>"]`。
+ *
+ * globals.css 里 THEME_CSS_START/END 之间的区块是它的逐字输出
+ * （tests/theme-contrast.test.ts 校验二者一致；改调色板后运行
+ * `npx vitest run tests/theme-contrast.test.ts` 会给出应粘贴的内容）。
+ *
+ * 为什么放样式表而不是由内联脚本写行内样式：五套调色板的 JSON 约 3.9KB，
+ * 内联在根布局会在每个页面的 HTML 里出现两次（<script> 一次、RSC 载荷
+ * 一次）；放进外置 CSS 只下载一次且可缓存，JS 被禁用时默认主题也完整可用。
+ */
+export function buildThemeCss(): string {
+  const block = (selector: string, name: ThemeName) =>
+    `${selector} {\n${themeCssVarEntries(name)
+      .map(([k, v]) => `  ${k}: ${v};`)
+      .join("\n")}\n}`;
+  return [
+    block(":root", DEFAULT_THEME),
+    ...themeNames
+      .filter((n) => n !== DEFAULT_THEME)
+      .map((n) => block(`:root[data-theme="${n}"]`, n)),
+  ].join("\n");
+}
+
 /**
  * 生成防闪烁内联脚本。
- * 在 <head> 里同步执行：读 localStorage 主题 → 立刻写 CSS 变量，
- * 避免首帧用默认色渲染再跳变。脚本内容由上面的调色板派生，
- * 不再是手抄的字面量。
+ * 在 <head> 里同步执行：读 localStorage 主题 → 立刻在 <html> 上写
+ * data-theme（调色板本身在 globals.css，见 buildThemeCss），
+ * 避免首帧用默认色渲染再跳变。脚本只携带每个主题的明暗与 theme-color。
  *
- * 同时新增：没有存过主题时，跟随系统 prefers-color-scheme 选择夜读/宣纸。
+ * 没有存过主题时，跟随系统 prefers-color-scheme 选择夜读/默认。
  */
 export function buildInlineThemeScript(): string {
-  const palette: Record<string, Record<string, string>> = {};
-  for (const name of themeNames) {
-    palette[name] = Object.fromEntries(themeCssVarEntries(name));
-  }
+  // [themeColor, 是否深色(0/1)]
   const meta = Object.fromEntries(
-    themeNames.map((n) => [n, { dark: themes[n].dark, tc: themes[n].themeColor }])
+    themeNames.map((n) => [n, [themes[n].themeColor, themes[n].dark ? 1 : 0]])
   );
 
   // 注意：这段字符串会进入 dangerouslySetInnerHTML，内容全部来自本模块的
   // 构建期常量（无用户输入），JSON.stringify 已转义引号。
-  return `(function(){try{var P=${JSON.stringify(palette)},M=${JSON.stringify(
-    meta
-  )},D=${JSON.stringify(DEFAULT_THEME)};var t=localStorage.getItem(${JSON.stringify(
+  return `(function(){try{var M=${JSON.stringify(meta)},t=localStorage.getItem(${JSON.stringify(
     THEME_STORAGE_KEY
-  )});if(!t||!P[t]){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'yedu':D;}var v=P[t],r=document.documentElement;for(var k in v){r.style.setProperty(k,v[k]);}r.classList.toggle('dark',!!M[t].dark);r.style.colorScheme=M[t].dark?'dark':'light';var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute('content',M[t].tc);}}catch(e){}})()`;
+  )});if(!M.hasOwnProperty(t)){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'yedu':${JSON.stringify(
+    DEFAULT_THEME
+  )};}var r=document.documentElement,d=M[t][1];r.setAttribute('data-theme',t);r.classList.toggle('dark',!!d);r.style.colorScheme=d?'dark':'light';var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute('content',M[t][0]);}}catch(e){}})()`;
 }
